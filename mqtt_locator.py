@@ -52,11 +52,10 @@ class Map(object):
         pygame.display.init()
         self.pings = []
         self.current_time = time.time()
-        self.last_frame_time = time.time()
         self.mqtt_info = mqtt_info
         self.client = mqtt.Client()
-        self.client.on_connect = lambda c, d, f, rc: self.on_connect(c,d,f,rc)
-        self.client.on_message = lambda c, d, m: self.on_message(c,d,m)
+        self.client.on_connect = self.on_connect
+        self.client.on_message = self.on_message
         self.client.connect(self.mqtt_info["host"],
                             int(self.mqtt_info["port"]),
                             int(self.mqtt_info["keepalive"]))
@@ -65,18 +64,22 @@ class Map(object):
         self.y_shift = self.background.get_height() / 2.0
         self.x_scale = self.x_shift / 180.0
         self.y_scale = self.y_shift /  90.0
-        self.screen_size = [self.background.get_width(), self.background.get_height()]
         self.zips = None
-        self.win = pygame.display.set_mode(self.screen_size, pygame.NOFRAME)
+        self.win = pygame.display.set_mode(
+            [
+                self.background.get_width(),
+                self.background.get_height()
+            ],
+            pygame.NOFRAME)
         self.client.loop_start()
 
-    def on_connect(self, client, _flags, userdata, rc):
+    def on_connect(self, client, _flags, _userdata, response_code):
         """MQTT Connection callback"""
-        print("Connected with result code {}".format(rc))
+        print("Connected with result code {}".format(response_code))
         print()
         client.subscribe(self.mqtt_info["topic"])
 
-    def on_message(self, _client, userdata, message):
+    def on_message(self, _client, _userdata, message):
         """MQTT Message recieved callback"""
         payload = json.loads(message.payload)
         if payload["postal_code"] is None or payload["postal_code"] == "":
