@@ -48,36 +48,48 @@ class Ping(object):
 
 class Map(object):
     """A class to render the map and pings"""
-    def __init__(self, mqtt_info):
+    def __init__(self, config):
         pygame.display.init()
+        screen_info = pygame.display.Info()
         self.pings = []
-        self.current_time = time.time()
-        self.mqtt_info = mqtt_info
+        self.config = config
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
-        self.client.connect(self.mqtt_info["host"],
-                            int(self.mqtt_info["port"]),
-                            int(self.mqtt_info["keepalive"]))
+        self.client.connect(self.config["host"],
+                            int(self.config["port"]),
+                            int(self.config["keepalive"]))
         self.background = pygame.image.load("map.PNG")
         self.x_shift = self.background.get_width() / 2.0
         self.y_shift = self.background.get_height() / 2.0
         self.x_scale = self.x_shift / 180.0
         self.y_scale = self.y_shift /  90.0
         self.zips = None
-        self.win = pygame.display.set_mode(
-            [
-                self.background.get_width(),
-                self.background.get_height()
-            ],
-            pygame.NOFRAME)
+        if config["fullscreen"].lower() != 'true':
+            self.win = pygame.display.set_mode(
+                [
+                    self.background.get_width(),
+                    self.background.get_height()
+                ],
+                pygame.NOFRAME)
+            self.x_offset = self.y_offset = 0
+        else:
+            self.win = pygame.display.set_mode(
+                [
+                    screen_info.current_w,
+                    screen_info.current_h
+                ],
+                pygame.FULLSCREEN)
+            self.x_offset = (screen_info.current_w - self.background.get_width()) / 2
+            self.y_offset = (screen_info.current_h - self.background.get_height()) / 2
+        print("{} {}".format(self.x_offset, self.y_offset))
         self.client.loop_start()
 
     def on_connect(self, client, _flags, _userdata, response_code):
         """MQTT Connection callback"""
         print("Connected with result code {}".format(response_code))
         print()
-        client.subscribe(self.mqtt_info["topic"])
+        client.subscribe(self.config["topic"])
 
     def on_message(self, _client, _userdata, message):
         """MQTT Message recieved callback"""
@@ -90,12 +102,12 @@ class Map(object):
         if zcode["Longitude"] is None or zcode["Latitude"] is None:
             return
         (x_coord, y_coord) = self.project(zcode["Longitude"], zcode["Latitude"])
-        self.pings.append(Ping(x_coord, y_coord))
+        self.pings.append(Ping(x_coord + self.x_offset, y_coord + self.y_offset))
 
     def draw(self):
         """Render the map and it's pings"""
         self.win.fill((59, 175, 218))
-        self.win.blit(self.background, (0, 0))
+        self.win.blit(self.background, (self.x_offset, self.y_offset))
         for ping in self.pings[:]:
             if ping.is_alive():
                 ping.draw(self.win)
@@ -137,6 +149,8 @@ def main():
         clock.tick(60)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                done = True
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 done = True
 
         world_map.draw()
