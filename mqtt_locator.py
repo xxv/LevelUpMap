@@ -25,7 +25,6 @@ class Ping(object):
         self.life_time = 1
         self.color = random.choice(Ping.colors)
         self.size = 20
-        self.grow_limit = 5
         self.coordinate = [x_loc, y_loc]
 
     def is_alive(self):
@@ -39,15 +38,13 @@ class Ping(object):
     def draw(self, win):
         """Renders a ping to a display window"""
         radius = int(round(self.life_factor() * self.size))
-        if radius < self.grow_limit:
-            thickness = radius
-        else:
-            thickness = self.grow_limit
-
-        pygame.draw.circle(win, self.color, self.coordinate, radius, thickness)
+        pygame.draw.circle(win, self.color, self.coordinate, radius, 2)
 
 class Map(object):
     """A class to render the map and pings"""
+
+    background_color = (0, 0, 0)
+
     def __init__(self, config):
         pygame.display.init()
         screen_info = pygame.display.Info()
@@ -79,7 +76,7 @@ class Map(object):
                     screen_info.current_w,
                     screen_info.current_h
                 ],
-                pygame.FULLSCREEN)
+                pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF)
             self.x_offset = (screen_info.current_w - self.background.get_width()) / 2
             self.y_offset = (screen_info.current_h - self.background.get_height()) / 2
         print("{} {}".format(self.x_offset, self.y_offset))
@@ -106,7 +103,7 @@ class Map(object):
 
     def draw(self):
         """Render the map and it's pings"""
-        self.win.fill((59, 175, 218))
+        self.win.fill(Map.background_color)
         self.win.blit(self.background, (self.x_offset, self.y_offset))
         for ping in self.pings[:]:
             if ping.is_alive():
