@@ -1,5 +1,7 @@
 """A library to plot zipcodes on a map of America"""
 
+from __future__ import print_function
+
 import pygame
 from pygame.locals import *
 import json
@@ -9,6 +11,8 @@ from pprint import pprint
 from uszipcode import ZipcodeSearchEngine
 import random
 import time
+import ConfigParser
+import sys
 
 class Ping(object):
     """A ping on the map"""
@@ -55,7 +59,7 @@ class Map(object):
         self.client = mqtt.Client()
         self.client.on_connect = lambda c, d, f, rc: self.on_connect(c,d,f,rc)
         self.client.on_message = lambda c, d, m: self.on_message(c,d,m)
-        self.client.connect(self.mqtt_info["host"], self.mqtt_info["port"], self.mqtt_info["keepalive"])
+        self.client.connect(self.mqtt_info["host"], int(self.mqtt_info["port"]), int(self.mqtt_info["keepalive"]))
         self.background = pygame.image.load("map.PNG")
         self.x_shift = self.background.get_width() / 2.0
         self.y_shift = self.background.get_height() / 2.0
@@ -103,18 +107,36 @@ class Map(object):
     def quit(self):
         self.client.loop_stop()
 
-done = False
-clock = pygame.time.Clock()
-world_map = Map({"host": "", "port": 1883, "keepalive": 60, "topic": ""})
+def read_config(config_file):
+    config = ConfigParser.SafeConfigParser()
+    read = config.read(config_file)
+    if not read:
+        print("Could not read config file {}".format(config_file))
+        sys.exit(1)
 
-while not done:
-    clock.tick(60)
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            done = True
+    return dict(config.items('map'))
 
-    world_map.draw()
-    pygame.display.flip()
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: {} CONFIG_FILE".format(sys.argv[0]))
+        print()
+        sys.exit(1)
+    config_file = sys.argv[1]
+    done = False
+    clock = pygame.time.Clock()
+    world_map = Map(read_config(config_file))
 
-world_map.quit()
-pygame.quit()
+    while not done:
+        clock.tick(60)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                done = True
+
+        world_map.draw()
+        pygame.display.flip()
+
+    world_map.quit()
+    pygame.quit()
+
+if __name__ == '__main__':
+    main()
