@@ -51,6 +51,7 @@ class Map(object):
     def __init__(self, config):
         pygame.display.init()
         screen_info = pygame.display.Info()
+        pygame.mouse.set_visible(False)
         self.pings = []
         self.config = config
         self.client = mqtt.Client()
