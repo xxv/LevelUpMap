@@ -54,17 +54,27 @@ class Map(object):
         pygame.mouse.set_visible(False)
         self.pings = []
         self.config = config
+
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.connect(self.config["host"],
                             int(self.config["port"]),
                             int(self.config["keepalive"]))
+
         self.background = pygame.image.load("map.PNG")
-        self.x_shift = self.background.get_width() / 2.0
-        self.y_shift = self.background.get_height() / 2.0
-        self.x_scale = self.x_shift / 180.0
-        self.y_scale = self.y_shift /  90.0
+
+        self.min_lat = float(self.config["minlat"])
+        self.max_lat = float(self.config["maxlat"])
+        self.min_long = float(self.config["minlong"])
+        self.max_long = float(self.config["maxlong"])
+
+        lat_range = (self.max_lat+180.0) - (self.min_lat+180.0)
+        long_range = (self.max_long+90.0) - (self.min_long+90.0)
+        self.x_scale = self.background.get_width() / long_range
+        self.y_scale = self.background.get_height() /  lat_range
+        self.x_shift = ((-self.min_long) * self.x_scale)
+        self.y_shift = ((-self.min_lat) * self.y_scale) + self.background.get_height()
         self.zips = None
         if config["fullscreen"].lower() != 'true':
             self.win = pygame.display.set_mode(
@@ -118,7 +128,7 @@ class Map(object):
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
         x_coord = (self.x_scale * lon) + self.x_shift
-        y_coord = self.y_shift - (self.y_scale * lat)
+        y_coord = -(self.y_scale * lat) + self.y_shift
         return (int(x_coord), int(y_coord))
 
     def quit(self):
