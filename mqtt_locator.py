@@ -38,7 +38,10 @@ class Ping(object):
     def draw(self, win):
         """Renders a ping to a display window"""
         radius = int(round(self.life_factor() * self.size))
-        pygame.draw.circle(win, self.color, self.coordinate, radius, 2)
+        thickness = 2
+        if thickness > radius:
+            thickness = radius
+        pygame.draw.circle(win, self.color, self.coordinate, radius, thickness)
 
 class Map(object):
     """A class to render the map and pings"""
