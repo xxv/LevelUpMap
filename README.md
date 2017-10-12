@@ -1,5 +1,6 @@
 # LevelUpMap
 A python MQTT Data mapping script.
+![Image of Visualization](https://github.com/plasmarobo/LevelUpMap/raw/us/EheltYX.gif "Map in Action")
 
 ## Installation
 Depends on SDL and Sqlite3.
