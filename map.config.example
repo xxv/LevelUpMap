@@ -1,4 +1,5 @@
 [map]
+map_image: map.png
 host: example.org
 port: 1883
 keepalive: 60

@@ -67,7 +67,7 @@ class Map(object):
                             int(self.config["port"]),
                             int(self.config["keepalive"]))
 
-        self.background = pygame.image.load("map.PNG")
+        self.background = pygame.image.load(self.config['map_image'])
 
         self.min_lat = float(self.config["minlat"])
         self.max_lat = float(self.config["maxlat"])
