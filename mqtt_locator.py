@@ -73,8 +73,9 @@ class Map(object):
         long_range = (self.max_long+90.0) - (self.min_long+90.0)
         self.x_scale = self.background.get_width() / long_range
         self.y_scale = self.background.get_height() /  lat_range
-        self.x_shift = ((-self.min_long) * self.x_scale)
-        self.y_shift = ((-self.min_lat) * self.y_scale) + self.background.get_height()
+        self.x_shift = -self.min_long * self.x_scale
+        self.y_shift = self.max_lat * self.y_scale
+
         self.zips = None
         if config["fullscreen"].lower() != 'true':
             self.win = pygame.display.set_mode(
