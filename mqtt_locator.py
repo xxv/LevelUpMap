@@ -26,7 +26,7 @@ class Ping(object):
         self.created_time = time.time()
         self.life_time = 1
         self.color = random.choice(Ping.colors)
-        self.size = 20
+        self.size = 40
         self.coordinate = [x_loc, y_loc]
 
     def is_alive(self):
@@ -39,11 +39,11 @@ class Ping(object):
 
     def draw(self, win):
         """Renders a ping to a display window"""
-        radius = int(round(self.life_factor() * self.size))
+        radius = int(round((1-self.life_factor()) * self.size))
         thickness = 2
         if thickness > radius:
             thickness = radius
-        pygame.draw.circle(win, self.color, self.coordinate, radius, thickness)
+        pygame.draw.rect(win, self.color, (self.coordinate[0] - radius/2, self.coordinate[1] - radius/2, radius, radius), 0)
 
     def __repr__(self):
         return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time, self.coordinate[0], self.coordinate[1])
