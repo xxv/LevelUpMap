@@ -10,6 +10,7 @@ import time
 
 import paho.mqtt.client as mqtt
 import pygame
+import pyproj
 from uszipcode import ZipcodeSearchEngine
 
 
@@ -74,12 +75,15 @@ class Map(object):
         self.min_long = float(self.config["minlong"])
         self.max_long = float(self.config["maxlong"])
 
-        lat_range = (self.max_lat+180.0) - (self.min_lat+180.0)
-        long_range = (self.max_long+90.0) - (self.min_long+90.0)
-        self.x_scale = self.background.get_width() / long_range
-        self.y_scale = self.background.get_height() /  lat_range
-        self.x_shift = -self.min_long * self.x_scale
-        self.y_shift = self.max_lat * self.y_scale
+        self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
+        self.proj_map = pyproj.Proj(init='esri:102003')
+
+        # the below is calibrated manually
+        MANUAL_SCALE_FACTOR = 3200000.0
+        self.x_scale = self.background.get_height()/MANUAL_SCALE_FACTOR
+        self.y_scale = self.x_scale
+        self.x_shift = self.background.get_width()/2
+        self.y_shift = self.background.get_height()/2
 
         self.zips = None
         if config["fullscreen"].lower() != 'true':
@@ -101,6 +105,26 @@ class Map(object):
             self.y_offset = (screen_info.current_h - self.background.get_height()) / 2
         print("{} {}".format(self.x_offset, self.y_offset))
         self.client.loop_start()
+
+    def test(self):
+        print("Window size: {}, {}".format(self.background.get_width(), self.background.get_height()))
+        print("scale: {}, {}\nshift: {}, {}".format(self.x_scale, self.y_scale, self.x_shift, self.y_shift))
+        seattle = [-122.4821474, 47.6129432]
+        la = [-118.6919199, 34.0201613]
+        bar_harbor = [-68.4103749, 44.3583123]
+        miami = [-80.369544, 25.7823404]
+        left_coast = [-124.411326, 40.438851]
+        cape_flattery = [-124.723378, 48.384951]
+        west_quoddy = [-66.952785, 44.816219]
+        p_town = [-70.2490474, 42.0622933]
+        print("Seattle: {} -> {}".format(seattle, self.project(*seattle)))
+        print("LA: {} -> {}".format(la, self.project(*la)))
+        print("Bar Harbor: {} -> {}".format(bar_harbor, self.project(*bar_harbor)))
+        print("Miami: {} -> {}".format(miami, self.project(*miami)))
+        places = [seattle, la, bar_harbor, miami, left_coast, cape_flattery, west_quoddy, p_town]
+        for place in places:
+            (x_coord, y_coord) = self.project(*place)
+            self.pings.append(Ping(x_coord + self.x_offset, y_coord + self.y_offset))
 
     def on_connect(self, client, _flags, _userdata, response_code):
         """MQTT Connection callback"""
@@ -133,8 +157,9 @@ class Map(object):
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
-        x_coord = (self.x_scale * lon) + self.x_shift
-        y_coord = -(self.y_scale * lat) + self.y_shift
+        (x_coord_m, y_coord_m) = pyproj.transform(self.proj_in, self.proj_map, lon, lat)
+        x_coord = (self.x_scale * x_coord_m) + self.x_shift
+        y_coord = -(self.y_scale * y_coord_m) + self.y_shift
 
         return (int(x_coord), int(y_coord))
 
@@ -167,6 +192,7 @@ def main():
 
     while not done:
         clock.tick(60)
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 done = True
