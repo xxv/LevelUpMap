@@ -12,6 +12,7 @@ import paho.mqtt.client as mqtt
 import pygame
 from uszipcode import ZipcodeSearchEngine
 
+
 class Ping(object):
     """A ping on the map"""
 
@@ -42,6 +43,10 @@ class Ping(object):
         if thickness > radius:
             thickness = radius
         pygame.draw.circle(win, self.color, self.coordinate, radius, thickness)
+
+    def __repr__(self):
+        return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time, self.coordinate[0], self.coordinate[1])
+
 
 class Map(object):
     """A class to render the map and pings"""
@@ -130,11 +135,13 @@ class Map(object):
         """Convert lat/long to pixel x/y"""
         x_coord = (self.x_scale * lon) + self.x_shift
         y_coord = -(self.y_scale * lat) + self.y_shift
+
         return (int(x_coord), int(y_coord))
 
     def quit(self):
         """Cleanup"""
         self.client.loop_stop()
+
 
 def read_config(config_file):
     """Global function to read external config file"""
@@ -145,6 +152,7 @@ def read_config(config_file):
         sys.exit(1)
 
     return dict(config.items('map'))
+
 
 def main():
     """Script Entry Point"""
@@ -170,6 +178,7 @@ def main():
 
     world_map.quit()
     pygame.quit()
+
 
 if __name__ == '__main__':
     main()
