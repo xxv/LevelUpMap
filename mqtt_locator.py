@@ -70,16 +70,10 @@ class Map(object):
 
         self.background = pygame.image.load(self.config['map_image'])
 
-        self.min_lat = float(self.config["minlat"])
-        self.max_lat = float(self.config["maxlat"])
-        self.min_long = float(self.config["minlong"])
-        self.max_long = float(self.config["maxlong"])
-
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
         self.proj_map = pyproj.Proj(init='esri:102003')
 
-        # the below is calibrated manually
-        MANUAL_SCALE_FACTOR = 3200000.0
+        MANUAL_SCALE_FACTOR = float(self.config['scale_factor'])
         self.x_scale = self.background.get_height()/MANUAL_SCALE_FACTOR
         self.y_scale = self.x_scale
         self.x_shift = self.background.get_width()/2
