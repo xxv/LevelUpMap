@@ -43,25 +43,25 @@ class Ping(object):
 
     def draw(self, win, font):
         """Renders a ping to a display window"""
-        radius = int(round((1-self.life_factor()) * self.size))
-        thickness = 2
-        if thickness > radius:
-            thickness = radius
-        pygame.draw.rect(win, self.color, (self.coordinate[0] - radius/2, self.coordinate[1] - radius/2, radius, radius), 0)
+        sq_size = int(round((1 - self.life_factor()) * self.size))
+        center_square = (self.coordinate[0] - sq_size/2,
+                         self.coordinate[1] - sq_size/2,
+                         sq_size, sq_size)
+        pygame.draw.rect(win, self.color, center_square, 0)
         if not self._text_surface:
             self._text_surface = font.render(self._text, True, self._text_color)
             rect = self._text_surface.get_rect()
             self._text_surface.convert_alpha()
             self._text_surface2 = pygame.surface.Surface(rect.size, pygame.SRCALPHA, 32)
             self._text_pos = (self.coordinate[0] - rect.width/2, self.coordinate[1])
-        fade = int(255 * (1-self.life_factor()))
+        fade = int(255 * (1 - self.life_factor()))
         self._text_surface2.fill((255, 255, 255, fade))
         self._text_surface2.blit(self._text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
         win.blit(self._text_surface2, self._text_pos)
 
-
     def __repr__(self):
-        return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time, self.coordinate[0], self.coordinate[1])
+        return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time,
+                                                  *self.coordinate)
 
 
 class Map(object):
@@ -85,10 +85,10 @@ class Map(object):
                             int(self.config["keepalive"]))
 
         self.font = pygame.font.SysFont('Source Sans Pro', 30)
-        self.background = pygame.image.load(self.config['map_image'])
+        self.background = pygame.image.load(config['map_image'])
 
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
-        self.proj_map = pyproj.Proj(init='esri:102003')
+        self.proj_map = pyproj.Proj(init=config['map_projection'])
 
         MANUAL_SCALE_FACTOR = float(self.config['scale_factor'])
         self.x_scale = self.background.get_height()/MANUAL_SCALE_FACTOR
