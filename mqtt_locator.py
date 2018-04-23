@@ -114,6 +114,7 @@ class Map(object):
                 pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF)
             self.x_offset = (screen_info.current_w - self.background.get_width()) / 2
             self.y_offset = (screen_info.current_h - self.background.get_height()) / 2
+        self.background = self.background.convert()
         print("{} {}".format(self.x_offset, self.y_offset))
         self.client.loop_start()
 
