@@ -17,17 +17,21 @@ from uszipcode import ZipcodeSearchEngine
 class Ping(object):
     """A ping on the map"""
 
+    _text_color = (0x55, 0x55, 0x55)
     colors = [
         (0xFF, 0x8D, 0x00),
         (0x1E, 0xBB, 0xF3),
         (0x71, 0xCB, 0x3A)]
 
-    def __init__(self, x_loc, y_loc):
+    def __init__(self, x_loc, y_loc, text):
         self.created_time = time.time()
         self.life_time = 1
         self.color = random.choice(Ping.colors)
         self.size = 40
         self.coordinate = [x_loc, y_loc]
+        self._text = text
+        self._text_surface = None
+        self._text_surface2 = None
 
     def is_alive(self):
         """Returns true if we are within lifetime, false otherwise"""
@@ -37,13 +41,24 @@ class Ping(object):
         """Gets a scaling factor based on life remaining"""
         return (time.time() - self.created_time) / self.life_time
 
-    def draw(self, win):
+    def draw(self, win, font):
         """Renders a ping to a display window"""
         radius = int(round((1-self.life_factor()) * self.size))
         thickness = 2
         if thickness > radius:
             thickness = radius
         pygame.draw.rect(win, self.color, (self.coordinate[0] - radius/2, self.coordinate[1] - radius/2, radius, radius), 0)
+        if not self._text_surface:
+            self._text_surface = font.render(self._text, True, self._text_color)
+            rect = self._text_surface.get_rect()
+            self._text_surface.convert_alpha()
+            self._text_surface2 = pygame.surface.Surface(rect.size, pygame.SRCALPHA, 32)
+            self._text_pos = (self.coordinate[0] - rect.width/2, self.coordinate[1])
+        fade = int(255 * (1-self.life_factor()))
+        self._text_surface2.fill((255, 255, 255, fade))
+        self._text_surface2.blit(self._text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        win.blit(self._text_surface2, self._text_pos)
+
 
     def __repr__(self):
         return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time, self.coordinate[0], self.coordinate[1])
@@ -56,6 +71,7 @@ class Map(object):
 
     def __init__(self, config):
         pygame.display.init()
+        pygame.font.init()
         screen_info = pygame.display.Info()
         pygame.mouse.set_visible(False)
         self.pings = []
@@ -68,6 +84,7 @@ class Map(object):
                             int(self.config["port"]),
                             int(self.config["keepalive"]))
 
+        self.font = pygame.font.SysFont('Source Sans Pro', 30)
         self.background = pygame.image.load(self.config['map_image'])
 
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
@@ -118,7 +135,7 @@ class Map(object):
         places = [seattle, la, bar_harbor, miami, left_coast, cape_flattery, west_quoddy, p_town]
         for place in places:
             (x_coord, y_coord) = self.project(*place)
-            self.pings.append(Ping(x_coord + self.x_offset, y_coord + self.y_offset))
+            self.pings.append(Ping(x_coord + self.x_offset, y_coord + self.y_offset, ''))
 
     def on_connect(self, client, _flags, _userdata, response_code):
         """MQTT Connection callback"""
@@ -136,8 +153,9 @@ class Map(object):
         zcode = self.zips.by_zipcode(payload["postal_code"])
         if zcode["Longitude"] is None or zcode["Latitude"] is None:
             return
+        merchant_name = payload.get('merchant_name', '')
         (x_coord, y_coord) = self.project(zcode["Longitude"], zcode["Latitude"])
-        self.pings.append(Ping(x_coord + self.x_offset, y_coord + self.y_offset))
+        self.pings.append(Ping(x_coord + self.x_offset, y_coord + self.y_offset, merchant_name))
 
     def draw(self):
         """Render the map and it's pings"""
@@ -145,7 +163,7 @@ class Map(object):
         self.win.blit(self.background, (self.x_offset, self.y_offset))
         for ping in self.pings[:]:
             if ping.is_alive():
-                ping.draw(self.win)
+                ping.draw(self.win, self.font)
             else:
                 self.pings.remove(ping)
 
