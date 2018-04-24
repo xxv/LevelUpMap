@@ -177,7 +177,7 @@ class Map(object):
                 ping.draw(self.win, self._font)
             else:
                 self.pings.remove(ping)
-        self.win.blit(self._font_avg_spend.render("Avgerage Order Price: ${:0.02f}".format(self._avg_spend.get()/100.0), True, self._text_color), (100, self.win.get_height() - 128))
+        self.win.blit(self._font_avg_spend.render("Average Order Price: ${:0.02f}".format(self._avg_spend.get()/100.0), True, self._text_color), (100, self.win.get_height() - 128))
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
