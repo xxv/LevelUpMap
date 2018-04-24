@@ -166,8 +166,6 @@ class Map(object):
         if spend:
             self._avg_spend.add(spend)
 
-        print(self.pings)
-
     def draw(self):
         """Render the map and it's pings"""
         self._avg_spend.tick()
