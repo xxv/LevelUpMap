@@ -1,6 +1,9 @@
 [map]
+map_image: map.png
+map_projection: esri:102003
+scale_factor: 3200000.0
+fullscreen: false
 host: example.org
 port: 1883
 keepalive: 60
 topic: map
-fullscreen: false
