@@ -192,7 +192,7 @@ class Map(object):
                 self.pings.remove(ping)
         self._draw_text_stat("Average Order Price: ${:0.02f}", self._avg_spend.get()/100.0, 0)
         self._draw_text_stat("Orders Today Total: ${:0,.02f}", self._cum_order_spend/100.0, 1)
-        self._draw_text_stat("Orders Today: {:n}", self._order_count, 2)
+        self._draw_text_stat("Orders Today: {:,}", self._order_count, 2)
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
