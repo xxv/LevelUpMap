@@ -11,6 +11,8 @@ import time
 import paho.mqtt.client as mqtt
 import pygame
 import pyproj
+from animated_average import AnimatedAverage
+
 from uszipcode import ZipcodeSearchEngine
 
 
@@ -67,7 +69,9 @@ class Ping(object):
 class Map(object):
     """A class to render the map and pings"""
 
-    background_color = (0, 0, 0)
+    _text_color = (0x55, 0x55, 0x55)
+    background_color = (0xe9, 0xe9, 0xe9)
+
 
     def __init__(self, config):
         pygame.display.init()
@@ -76,6 +80,7 @@ class Map(object):
         pygame.mouse.set_visible(False)
         self.pings = []
         self.config = config
+        self._avg_spend = AnimatedAverage()
 
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
@@ -84,7 +89,7 @@ class Map(object):
                             int(self.config["port"]),
                             int(self.config["keepalive"]))
 
-        self.font = pygame.font.SysFont('Source Sans Pro', 30)
+        self._font = pygame.font.SysFont('Source Sans Pro', 30)
         self.background = pygame.image.load(config['map_image'])
 
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
@@ -157,16 +162,23 @@ class Map(object):
         merchant_name = payload.get('merchant_name', '')
         (x_coord, y_coord) = self.project(zcode["Longitude"], zcode["Latitude"])
         self.pings.append(Ping(x_coord + self.x_offset, y_coord + self.y_offset, merchant_name))
+        spend = int(payload['spend_amount'])
+        if spend:
+            self._avg_spend.add(spend)
+
+        print(self.pings)
 
     def draw(self):
         """Render the map and it's pings"""
+        self._avg_spend.tick()
         self.win.fill(Map.background_color)
         self.win.blit(self.background, (self.x_offset, self.y_offset))
         for ping in self.pings[:]:
             if ping.is_alive():
-                ping.draw(self.win, self.font)
+                ping.draw(self.win, self._font)
             else:
                 self.pings.remove(ping)
+        self.win.blit(self._font.render("Avg. Spend  ${:0.02f}".format(self._avg_spend.get()/100.0), True, self._text_color), (20, self.win.get_height() - 60))
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
@@ -202,6 +214,7 @@ def main():
     done = False
     clock = pygame.time.Clock()
     world_map = Map(read_config(config_file))
+    avg_spend = AnimatedAverage(count=500)
 
     while not done:
         clock.tick(60)
