@@ -55,7 +55,7 @@ class Ping(object):
             rect = self._text_surface.get_rect()
             self._text_surface.convert_alpha()
             self._text_surface2 = pygame.surface.Surface(rect.size, pygame.SRCALPHA, 32)
-            self._text_pos = (self.coordinate[0] - rect.width/2, self.coordinate[1])
+            self._text_pos = (self.coordinate[0] - rect.width/2, self.coordinate[1] + 15)
         fade = int(255 * (1 - self.life_factor()))
         self._text_surface2.fill((255, 255, 255, fade))
         self._text_surface2.blit(self._text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
@@ -89,7 +89,8 @@ class Map(object):
                             int(self.config["port"]),
                             int(self.config["keepalive"]))
 
-        self._font = pygame.font.SysFont('Source Sans Pro', 30)
+        self._font = pygame.font.SysFont('Source Sans Pro Semibold', 25)
+        self._font_avg_spend = pygame.font.SysFont('Source Sans Pro', 30, bold=True)
         self.background = pygame.image.load(config['map_image'])
 
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
@@ -176,7 +177,7 @@ class Map(object):
                 ping.draw(self.win, self._font)
             else:
                 self.pings.remove(ping)
-        self.win.blit(self._font.render("Avg. Spend  ${:0.02f}".format(self._avg_spend.get()/100.0), True, self._text_color), (20, self.win.get_height() - 60))
+        self.win.blit(self._font_avg_spend.render("Avgerage Order Price: ${:0.02f}".format(self._avg_spend.get()/100.0), True, self._text_color), (100, self.win.get_height() - 128))
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
