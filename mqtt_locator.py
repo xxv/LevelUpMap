@@ -2,7 +2,11 @@
 
 from __future__ import print_function
 
-import ConfigParser
+try:
+    from ConfigParser import SafeConfigParser
+except ImportError:
+    from configparser import SafeConfigParser
+from datetime import datetime
 import json
 import random
 import sys
@@ -80,7 +84,10 @@ class Map(object):
         pygame.mouse.set_visible(False)
         self.pings = []
         self.config = config
-        self._avg_spend = AnimatedAverage()
+        self._avg_spend = AnimatedAverage(count=500)
+        self._order_count = 0
+        self._cum_order_spend = 0
+        self._day_start = datetime.now()
 
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
@@ -152,7 +159,7 @@ class Map(object):
 
     def on_message(self, _client, _userdata, message):
         """MQTT Message recieved callback"""
-        payload = json.loads(message.payload)
+        payload = json.loads(message.payload.decode('utf-8'))
         if payload["postal_code"] is None or payload["postal_code"] == "":
             return
         if self.zips is None:
@@ -166,6 +173,12 @@ class Map(object):
         spend = int(payload['spend_amount'])
         if spend:
             self._avg_spend.add(spend)
+        self._maybe_reset_daily_totals()
+        self._order_count += 1
+        self._cum_order_spend += spend
+
+    def _draw_text_stat(self, text, value, index):
+        self.win.blit(self._font_avg_spend.render(text.format(value), True, self._text_color), (100, (self.win.get_height() - 180) + index * 40))
 
     def draw(self):
         """Render the map and it's pings"""
@@ -177,7 +190,9 @@ class Map(object):
                 ping.draw(self.win, self._font)
             else:
                 self.pings.remove(ping)
-        self.win.blit(self._font_avg_spend.render("Average Order Price: ${:0.02f}".format(self._avg_spend.get()/100.0), True, self._text_color), (100, self.win.get_height() - 128))
+        self._draw_text_stat("Average Order Price: ${:0.02f}", self._avg_spend.get()/100.0, 0)
+        self._draw_text_stat("Orders Today Total: ${:0,.02f}", self._cum_order_spend/100.0, 1)
+        self._draw_text_stat("Orders Today: {:n}", self._order_count, 2)
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
@@ -191,10 +206,17 @@ class Map(object):
         """Cleanup"""
         self.client.loop_stop()
 
+    def _maybe_reset_daily_totals(self):
+        now = datetime.now()
+        if self._day_start.day != now.day:
+            self._cum_order_spend = 0
+            self._order_count = 0
+            self._day_start = now
+
 
 def read_config(config_file):
     """Global function to read external config file"""
-    config = ConfigParser.SafeConfigParser()
+    config = SafeConfigParser()
     read = config.read(config_file)
     if not read:
         print("Could not read config file {}".format(config_file))
@@ -213,7 +235,6 @@ def main():
     done = False
     clock = pygame.time.Clock()
     world_map = Map(read_config(config_file))
-    avg_spend = AnimatedAverage(count=500)
 
     while not done:
         clock.tick(60)
