@@ -15,7 +15,7 @@ import time
 import paho.mqtt.client as mqtt
 import pygame
 import pyproj
-from animated_average import AnimatedAverage
+from animated_value import AnimatedAverage, AnimatedValue
 
 from uszipcode import ZipcodeSearchEngine
 
@@ -87,6 +87,7 @@ class Map(object):
         self._avg_spend = AnimatedAverage(count=500)
         self._order_count = 0
         self._cum_order_spend = 0
+        self._cum_order_spend_anim = AnimatedValue()
         self._day_start = datetime.now()
 
         self.client = mqtt.Client()
@@ -176,6 +177,7 @@ class Map(object):
         self._maybe_reset_daily_totals()
         self._order_count += 1
         self._cum_order_spend += spend
+        self._cum_order_spend_anim.set(self._cum_order_spend)
 
     def _draw_text_stat(self, text, value, index):
         self.win.blit(self._font_avg_spend.render(text.format(value), True, self._text_color), (100, (self.win.get_height() - 180) + index * 40))
@@ -183,6 +185,7 @@ class Map(object):
     def draw(self):
         """Render the map and it's pings"""
         self._avg_spend.tick()
+        self._cum_order_spend_anim.tick()
         self.win.fill(Map.background_color)
         self.win.blit(self.background, (self.x_offset, self.y_offset))
         for ping in self.pings[:]:
@@ -191,7 +194,7 @@ class Map(object):
             else:
                 self.pings.remove(ping)
         self._draw_text_stat("Average Order Price: ${:0.02f}", self._avg_spend.get()/100.0, 0)
-        self._draw_text_stat("Orders Today Total: ${:0,.02f}", self._cum_order_spend/100.0, 1)
+        self._draw_text_stat("Orders Today Total: ${:0,.02f}", self._cum_order_spend_anim.get()/100.0, 1)
         self._draw_text_stat("Orders Today: {:,}", self._order_count, 2)
 
     def project(self, lon, lat):
