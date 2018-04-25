@@ -31,7 +31,7 @@ class Ping(object):
 
     def __init__(self, x_loc, y_loc, text):
         self.created_time = time.time()
-        self.life_time = 1
+        self.life_time = 3
         self.color = random.choice(Ping.colors)
         self.size = 40
         self.coordinate = [x_loc, y_loc]
