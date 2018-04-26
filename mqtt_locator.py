@@ -24,16 +24,17 @@ from uszipcode import ZipcodeSearchEngine
 class Ping(object):
     """A ping on the map"""
 
-    _text_color = (0x55, 0x55, 0x55)
-    colors = [
-        (0xFF, 0x8D, 0x00),
-        (0x1E, 0xBB, 0xF3),
-        (0x71, 0xCB, 0x3A)]
 
-    def __init__(self, world, x_loc, y_loc, text):
+    ORANGE = (0xFF, 0x8D, 0x00)
+    BLUE = (0x1E, 0xBB, 0xF3)
+    GREEN = (0x71, 0xCB, 0x3A)
+
+    _text_color = (0x55, 0x55, 0x55)
+
+    def __init__(self, world, x_loc, y_loc, color, text):
         self.created_time = time.time()
         self.life_time = 3
-        self.color = random.choice(Ping.colors)
+        self._color = color
         self.size = 40
         self._text = text
         self._text_surface = None
@@ -60,7 +61,7 @@ class Ping(object):
         alpha = int((1.0 - self.life_factor()) * 255)
         if not self._rect_surface:
             self._rect_surface = pygame.surface.Surface((sq_size, sq_size))
-            self._rect_surface.fill(self.color)
+            self._rect_surface.fill(self._color)
         self._rect_surface.set_alpha(alpha)
         win.blit(self._rect_surface, center_square)
         if not self._text_surface:
@@ -113,6 +114,7 @@ class Map(object):
                             int(self.config["keepalive"]))
 
         self._font = pygame.font.SysFont('Source Sans Pro Semibold', 25)
+        self._legend_font = pygame.font.SysFont('Source Sans Pro', 25)
         self._font_avg_spend = pygame.font.SysFont('Source Sans Pro', 30, bold=True)
         self.background = pygame.image.load(config['map_image'])
 
@@ -176,16 +178,10 @@ class Map(object):
     def on_message(self, _client, _userdata, message):
         """MQTT Message received callback"""
         payload = json.loads(message.payload.decode('utf-8'))
-        if payload["postal_code"] is None or payload["postal_code"] == "":
+        ping = self._to_ping(payload)
+        if not ping:
             return
-        if self.zips is None:
-            self.zips = ZipcodeSearchEngine()
-        zcode = self.zips.by_zipcode(payload["postal_code"])
-        if zcode["Longitude"] is None or zcode["Latitude"] is None:
-            return
-        merchant_name = payload.get('merchant_name', '')
-        (x_coord, y_coord) = self.project(zcode["Longitude"], zcode["Latitude"])
-        self.pings.append(Ping(self._world, x_coord + self.x_offset, y_coord + self.y_offset, merchant_name))
+        self.pings.append(ping)
         spend = int(payload['spend_amount'])
         if spend:
             self._avg_spend.add(spend)
@@ -194,8 +190,46 @@ class Map(object):
         self._cum_order_spend += spend
         self._cum_order_spend_anim.set(self._cum_order_spend)
 
+    def _to_ping(self, payload):
+        if payload["postal_code"] is None or payload["postal_code"] == "":
+            return None
+        if self.zips is None:
+            self.zips = ZipcodeSearchEngine()
+        zcode = self.zips.by_zipcode(payload["postal_code"])
+        if zcode["Longitude"] is None or zcode["Latitude"] is None:
+            return None
+        merchant_name = payload.get('merchant_name', '')
+
+        if payload.get('user_order_app_name', None) == 'LevelUp':
+            color = Ping.ORANGE
+        elif payload.get('ready_time', None):
+            color = Ping.GREEN
+        else:
+            color = Ping.BLUE
+
+        (x_coord, y_coord) = self.project(zcode["Longitude"], zcode["Latitude"])
+
+        return Ping(self._world, x_coord + self.x_offset, y_coord + self.y_offset, color, merchant_name)
+
     def _draw_text_stat(self, text, value, index):
         self.win.blit(self._font_avg_spend.render(text.format(value), True, self._text_color), (100, (self.win.get_height() - 180) + index * 40))
+
+    def _render_legend_item(self, color, text):
+        text_offset = (30, -8)
+        rect_size = 20
+        text_surface = self._legend_font.render(text, True, self._text_color)
+        text_size = text_surface.get_rect().size
+        surface = pygame.surface.Surface((text_size[0] + text_offset[0], text_size[1] + text_offset[1]), pygame.SRCALPHA, 32)
+        surface.blit(text_surface, text_offset)
+        pygame.draw.rect(surface, color, (0, 0, rect_size, rect_size), 0)
+
+        return surface
+
+    def _draw_legend(self, position):
+        self.win.blit(self._render_legend_item(Ping.ORANGE, "LevelUp app"), position)
+        self.win.blit(self._render_legend_item(Ping.GREEN, "order ahead"), (position[0], position[1] + 30))
+        self.win.blit(self._render_legend_item(Ping.BLUE, "in-store orders"), (position[0], position[1] + 60))
+
 
     def draw(self):
         """Render the map and it's pings"""
@@ -219,6 +253,7 @@ class Map(object):
         self._draw_text_stat("Average Order Price: ${:0.02f}", self._avg_spend.get()/100.0, 0)
         self._draw_text_stat("Orders Today Total: ${:0,.02f}", self._cum_order_spend_anim.get()/100.0, 1)
         self._draw_text_stat("Orders Today: {:,}", self._order_count, 2)
+        self._draw_legend((self.background.get_width() - 250, self.background.get_height() - 150))
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
