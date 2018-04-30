@@ -253,6 +253,8 @@ class Map(object):
         self._draw_text_stat("Average Order Price: ${:0.02f}", self._avg_spend.get()/100.0, 0)
         self._draw_text_stat("Orders Today Total: ${:0,.02f}", self._cum_order_spend_anim.get()/100.0, 1)
         self._draw_text_stat("Orders Today: {:,}", self._order_count, 2)
+        if self._day_start.hour != 0:
+            self.win.blit(self._legend_font.render("Order totals reset at {}".format(self._day_start.strftime("%Y-%m-%d %H:%M:%S %Z")), True, (0xaa, 0xaa, 0xaa)), (100, (self.win.get_height() - 40)))
         self._draw_legend((self.background.get_width() - 250, self.background.get_height() - 150))
 
     def project(self, lon, lat):
