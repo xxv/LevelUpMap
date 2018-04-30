@@ -6,7 +6,7 @@ try:
     from ConfigParser import SafeConfigParser
 except ImportError:
     from configparser import SafeConfigParser
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import random
 import sys
@@ -14,6 +14,7 @@ import time
 
 import paho.mqtt.client as mqtt
 import pygame
+import pyganim
 import pyproj
 from animated_value import AnimatedAverage, AnimatedValue
 from Box2D import b2PolygonShape, b2World
@@ -105,6 +106,11 @@ class Map(object):
         self._cum_order_spend_anim = AnimatedValue()
         self._day_start = datetime.now()
         self._last_frame = 0
+        self._event_topic = config['topic']
+        self._stats = {}
+        self._stats_last_update = None
+        self._stats_stale = timedelta(seconds=10)
+        self._loading = False
 
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
@@ -147,6 +153,8 @@ class Map(object):
             self.y_offset = (screen_info.current_h - self.background.get_height()) / 2
         self.background = self.background.convert()
         print("{} {}".format(self.x_offset, self.y_offset))
+
+        self._progress_anim = Map._load_anim('progress{:}.png', range(1, 9), 100)
         self.client.loop_start()
 
     def test(self):
@@ -167,17 +175,24 @@ class Map(object):
         places = [seattle, la, bar_harbor, miami, left_coast, cape_flattery, west_quoddy, p_town]
         for place in places:
             (x_coord, y_coord) = self.project(*place)
-            self.pings.append(Ping(self._world, x_coord + self.x_offset, y_coord + self.y_offset, ''))
+            self.pings.append(Ping(self._world, x_coord + self.x_offset, y_coord + self.y_offset, (0, 0, 0), ''))
 
     def on_connect(self, client, _flags, _userdata, response_code):
         """MQTT Connection callback"""
         print("Connected with result code {}".format(response_code))
         print()
-        client.subscribe(self.config["topic"])
+        client.subscribe(self._event_topic)
+        client.subscribe('dataclip_mqtt/#')
 
     def on_message(self, _client, _userdata, message):
         """MQTT Message received callback"""
-        payload = json.loads(message.payload.decode('utf-8'))
+
+        if message.topic == self._event_topic:
+            self.on_event(json.loads(message.payload.decode('utf-8')))
+        elif message.topic == 'dataclip_mqtt/stats':
+            self.on_stats(json.loads(message.payload.decode('utf-8')))
+
+    def on_event(self, payload):
         ping = self._to_ping(payload)
         if not ping:
             return
@@ -189,6 +204,10 @@ class Map(object):
         self._order_count += 1
         self._cum_order_spend += spend
         self._cum_order_spend_anim.set(self._cum_order_spend)
+
+    def on_stats(self, stats):
+        self._stats_last_update = datetime.now()
+        self._stats = stats
 
     def _to_ping(self, payload):
         if payload["postal_code"] is None or payload["postal_code"] == "":
@@ -230,6 +249,49 @@ class Map(object):
         self.win.blit(self._render_legend_item(Ping.GREEN, "order ahead"), (position[0], position[1] + 30))
         self.win.blit(self._render_legend_item(Ping.BLUE, "in-store orders"), (position[0], position[1] + 60))
 
+    def _draw_stats(self):
+        source = self._stats.get('source', {})
+
+        buffer_size = self._stats.get('buffer_size', 0)
+
+        before = source.get('events_before_window', 0)
+        in_win = source.get('events_in_window', 0)
+        after = source.get('events_after_window', 0)
+
+        surface = pygame.surface.Surface((self.win.get_width(), 4), pygame.SRCALPHA, 32)
+        pygame.draw.line(surface, (180, 180, 180), (0, 0), (before, 0), 2)
+        pygame.draw.line(surface, (90, 90, 90), (before, 0), (before + in_win, 0), 2)
+        pygame.draw.line(surface, (10, 10, 10), (before + in_win, 0), (before + in_win + after, 0), 2)
+
+        pygame.draw.line(surface, (90, 90, 90), (before, 2), (before + buffer_size, 2), 2)
+
+        self.win.blit(surface, (0, 0))
+
+    def _draw_progress(self):
+        buffer_size = self._stats.get('buffer_size', 0)
+
+        stats_stale = not self._stats_last_update or (
+            datetime.now() > (self._stats_last_update + self._stats_stale))
+
+        new_loading = buffer_size == 0 or stats_stale
+
+        if new_loading != self._loading:
+            self._loading = new_loading
+            if new_loading:
+                self._progress_anim.play()
+            else:
+                self._progress_anim.stop()
+
+        if new_loading:
+            win_center = self.win.get_rect().center
+            anim_center = self._progress_anim.getRect().center
+            self._progress_anim.blit(self.win, (win_center[0] - anim_center[0],
+                                                win_center[1] - anim_center[1]))
+
+    @staticmethod
+    def _load_anim(filename_format, values, timing):
+        return pyganim.PygAnimation([(filename_format.format(i), timing) for i in values])
+
 
     def draw(self):
         """Render the map and it's pings"""
@@ -256,6 +318,8 @@ class Map(object):
         if self._day_start.hour != 0:
             self.win.blit(self._legend_font.render("Order totals reset at {}".format(self._day_start.strftime("%Y-%m-%d %H:%M:%S %Z")), True, self._text_color), (100, (self.win.get_height() - 40)))
         self._draw_legend((self.background.get_width() - 250, self.background.get_height() - 150))
+        self._draw_stats()
+        self._draw_progress()
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
