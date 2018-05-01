@@ -126,6 +126,7 @@ class Map(object):
         self._legend_font = pygame.font.SysFont('Source Sans Pro', 25)
         self._font_avg_spend = pygame.font.SysFont('Source Sans Pro', 30, bold=True)
         self.background = pygame.image.load(config['map_image'])
+        self._mask = pygame.image.load(config['map_image_mask'])
 
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
         self.proj_map = pyproj.Proj(init=config['map_projection'])
@@ -155,10 +156,11 @@ class Map(object):
             self.x_offset = (screen_info.current_w - self.background.get_width()) / 2
             self.y_offset = (screen_info.current_h - self.background.get_height()) / 2
         self.background = self.background.convert()
+        self._mask = self._mask.convert_alpha()
         print("{} {}".format(self.x_offset, self.y_offset))
 
         self._progress_anim = Map._load_anim('progress{:}.png', range(1, 9), 100)
-        self._heatmap = Heatmap(self.background.get_size())
+        self._heatmap = Heatmap(self.background.get_size(), (0x8c, 0x00, 0xff))
         self.client.loop_start()
 
     def test(self):
@@ -312,6 +314,7 @@ class Map(object):
         self.win.fill(Map.background_color)
         self.win.blit(self.background, (self.x_offset, self.y_offset))
         self.win.blit(self._heatmap.render(), (0, 0))
+        self.win.blit(self._mask, (self.x_offset, self.y_offset))
         for ping in self.pings[:]:
             if ping.is_alive():
                 ping.draw(self.win, self._font)
@@ -386,12 +389,12 @@ def main():
 
 
 def main_profiled():
-    import cProfile, pstats, StringIO
+    import cProfile, pstats, io
     pr = cProfile.Profile()
     pr.enable()
     main()
     pr.disable()
-    s = StringIO.StringIO()
+    s = io.StringIO()
     sortby = 'cumulative'
     ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
     ps.print_stats()
