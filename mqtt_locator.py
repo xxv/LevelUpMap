@@ -21,6 +21,8 @@ from Box2D import b2PolygonShape, b2World
 
 from uszipcode import ZipcodeSearchEngine
 
+from heatmap import Heatmap
+
 
 class Ping(object):
     """A ping on the map"""
@@ -35,8 +37,9 @@ class Ping(object):
     def __init__(self, world, x_loc, y_loc, color, text):
         self.created_time = time.time()
         self.life_time = 3
-        self._color = color
+        self.position = (x_loc, y_loc)
         self.size = 40
+        self._color = color
         self._text = text
         self._text_surface = None
         self._text_surface2 = None
@@ -155,6 +158,7 @@ class Map(object):
         print("{} {}".format(self.x_offset, self.y_offset))
 
         self._progress_anim = Map._load_anim('progress{:}.png', range(1, 9), 100)
+        self._heatmap = Heatmap(self.background.get_size())
         self.client.loop_start()
 
     def test(self):
@@ -204,6 +208,7 @@ class Map(object):
         self._order_count += 1
         self._cum_order_spend += spend
         self._cum_order_spend_anim.set(self._cum_order_spend)
+        self._heatmap.add(ping.position)
 
     def on_stats(self, stats):
         self._stats_last_update = datetime.now()
@@ -306,6 +311,7 @@ class Map(object):
         self._last_frame = frame_time
         self.win.fill(Map.background_color)
         self.win.blit(self.background, (self.x_offset, self.y_offset))
+        self.win.blit(self._heatmap.render(), (0, 0))
         for ping in self.pings[:]:
             if ping.is_alive():
                 ping.draw(self.win, self._font)
