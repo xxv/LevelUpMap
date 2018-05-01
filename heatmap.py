@@ -1,4 +1,5 @@
 import numpy as np
+from datetime import datetime, timedelta
 import pygame
 
 class Heatmap(object):
@@ -11,12 +12,17 @@ class Heatmap(object):
         self._data = np.zeros(scaled_size, dtype=np.int16)
         self._norm = None
         self._dirty = True
+        self._last_update = None
+        self._update_frequency = timedelta(seconds=1)
 
     def add(self, position):
         scaled_pos = (int(position[0]/self._scale_factor),
                       int(position[1]/self._scale_factor))
         self._data[scaled_pos] += 1
-        self._dirty = True
+        now = datetime.now()
+        if not self._last_update or (now > (self._last_update + self._update_frequency)):
+            self._dirty = True
+            self._last_update = now
 
     def render(self):
         if self._dirty:
