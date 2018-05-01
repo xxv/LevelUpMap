@@ -1,5 +1,5 @@
 [map]
-map_image: map.png
+map_image_mask: map_mask.png
 map_projection: esri:102003
 scale_factor: 3200000.0
 fullscreen: false

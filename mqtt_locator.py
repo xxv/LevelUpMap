@@ -93,7 +93,7 @@ class Map(object):
     """A class to render the map and pings"""
 
     _text_color = (0x55, 0x55, 0x55)
-    background_color = (0xe9, 0xe9, 0xe9)
+    background_color = (0xcc, 0xcc, 0xcc)
 
     def __init__(self, config):
         pygame.display.init()
@@ -125,24 +125,23 @@ class Map(object):
         self._font = pygame.font.SysFont('Source Sans Pro Semibold', 25)
         self._legend_font = pygame.font.SysFont('Source Sans Pro', 25)
         self._font_avg_spend = pygame.font.SysFont('Source Sans Pro', 30, bold=True)
-        self.background = pygame.image.load(config['map_image'])
         self._mask = pygame.image.load(config['map_image_mask'])
 
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
         self.proj_map = pyproj.Proj(init=config['map_projection'])
 
         MANUAL_SCALE_FACTOR = float(self.config['scale_factor'])
-        self.x_scale = self.background.get_height()/MANUAL_SCALE_FACTOR
+        self.x_scale = self._mask.get_height()/MANUAL_SCALE_FACTOR
         self.y_scale = self.x_scale
-        self.x_shift = self.background.get_width()/2
-        self.y_shift = self.background.get_height()/2
+        self.x_shift = self._mask.get_width()/2
+        self.y_shift = self._mask.get_height()/2
 
         self.zips = None
         if config["fullscreen"].lower() != 'true':
             self.win = pygame.display.set_mode(
                 [
-                    self.background.get_width(),
-                    self.background.get_height()
+                    self._mask.get_width(),
+                    self._mask.get_height()
                 ],
                 pygame.NOFRAME | pygame.HWSURFACE | pygame.DOUBLEBUF)
             self.x_offset = self.y_offset = 0
@@ -153,18 +152,17 @@ class Map(object):
                     screen_info.current_h
                 ],
                 pygame.FULLSCREEN | pygame.HWSURFACE | pygame.DOUBLEBUF)
-            self.x_offset = (screen_info.current_w - self.background.get_width()) / 2
-            self.y_offset = (screen_info.current_h - self.background.get_height()) / 2
-        self.background = self.background.convert()
+            self.x_offset = (screen_info.current_w - self._mask.get_width()) / 2
+            self.y_offset = (screen_info.current_h - self._mask.get_height()) / 2
         self._mask = self._mask.convert_alpha()
         print("{} {}".format(self.x_offset, self.y_offset))
 
         self._progress_anim = Map._load_anim('progress{:}.png', range(1, 9), 100)
-        self._heatmap = Heatmap(self.background.get_size(), (0x8c, 0x00, 0xff))
+        self._heatmap = Heatmap(self._mask.get_size(), (0x8c, 0x00, 0xff))
         self.client.loop_start()
 
     def test(self):
-        print("Window size: {}, {}".format(self.background.get_width(), self.background.get_height()))
+        print("Window size: {}, {}".format(self._mask.get_width(), self._mask.get_height()))
         print("scale: {}, {}\nshift: {}, {}".format(self.x_scale, self.y_scale, self.x_shift, self.y_shift))
         seattle = [-122.4821474, 47.6129432]
         la = [-118.6919199, 34.0201613]
@@ -312,7 +310,6 @@ class Map(object):
         self._world.Step(frame_delay, 6, 2)
         self._last_frame = frame_time
         self.win.fill(Map.background_color)
-        self.win.blit(self.background, (self.x_offset, self.y_offset))
         self.win.blit(self._heatmap.render(), (0, 0))
         self.win.blit(self._mask, (self.x_offset, self.y_offset))
         for ping in self.pings[:]:
@@ -326,7 +323,7 @@ class Map(object):
         self._draw_text_stat("Orders Today: {:,}", self._order_count, 2)
         if self._day_start.hour != 0:
             self.win.blit(self._legend_font.render("Order totals reset at {}".format(self._day_start.strftime("%Y-%m-%d %H:%M:%S %Z")), True, self._text_color), (100, (self.win.get_height() - 40)))
-        self._draw_legend((self.background.get_width() - 250, self.background.get_height() - 150))
+        self._draw_legend((self._mask.get_width() - 250, self._mask.get_height() - 150))
         self._draw_stats()
         self._draw_progress()
 
