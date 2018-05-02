@@ -6,9 +6,14 @@ import numpy as np
 import pygame
 
 class Heatmap(object):
-    def __init__(self, size, color, scale_factor=8):
+    def __init__(self, size, color, background=None, scale_factor=8):
         self._scale_factor = scale_factor
-        self.surface = pygame.Surface(size, pygame.SRCALPHA, 32)
+        self._scaled_surface = pygame.Surface(size, pygame.SRCALPHA, 32)
+        if background:
+            self._bg_surface = pygame.Surface(size, pygame.SRCALPHA, 32)
+        else:
+            self._bg_surface = None
+        self._surface = None
         self._scaled_size = (int(size[0]/scale_factor), int(size[1]/scale_factor))
         self._boxes = pygame.Surface(self._scaled_size, pygame.SRCALPHA, 32)
         self._boxes.fill(color)
@@ -16,6 +21,7 @@ class Heatmap(object):
         self._norm = None
         self._dirty = True
         self._last_update = None
+        self._bgcolor = background
         self._update_frequency = timedelta(seconds=1)
 
     def add(self, position):
@@ -38,10 +44,16 @@ class Heatmap(object):
                 self._norm = self._data
             pixel_data = pygame.surfarray.pixels_alpha(self._boxes)
             pixel_data[:] = self._norm
-            pygame.transform.scale(self._boxes, self.surface.get_size(), self.surface)
+            pygame.transform.scale(self._boxes, self._scaled_surface.get_size(), self._scaled_surface)
             self._dirty = False
+            if self._bg_surface:
+                self._bg_surface.fill(self._bgcolor)
+                self._bg_surface.blit(self._scaled_surface, (0, 0))
+                self._surface = self._bg_surface
+            else:
+                self._surface = self._scaled_surface
 
-        return self.surface
+        return self._surface
 
     def snapshot(self):
         return base64.b64encode(gzip.compress(self._data.tobytes())).decode('ascii')

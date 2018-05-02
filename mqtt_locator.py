@@ -161,7 +161,7 @@ class Map(object):
         print("{} {}".format(self.x_offset, self.y_offset))
 
         self._progress_anim = Map._load_anim('progress{:}.png', range(1, 9), 100)
-        self._heatmap = Heatmap(self._mask.get_size(), (0x8c, 0x00, 0xff))
+        self._heatmap = Heatmap(self._mask.get_size(), (0x00, 0x00, 0x00), (0xff, 0xff, 0xff))
         self.client.loop_start()
 
     def test(self):
