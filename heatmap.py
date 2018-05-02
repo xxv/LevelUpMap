@@ -1,15 +1,18 @@
-import numpy as np
+import base64
 from datetime import datetime, timedelta
+import gzip
+
+import numpy as np
 import pygame
 
 class Heatmap(object):
     def __init__(self, size, color, scale_factor=8):
         self._scale_factor = scale_factor
         self.surface = pygame.Surface(size, pygame.SRCALPHA, 32)
-        scaled_size = (int(size[0]/scale_factor), int(size[1]/scale_factor))
-        self._boxes = pygame.Surface(scaled_size, pygame.SRCALPHA, 32)
+        self._scaled_size = (int(size[0]/scale_factor), int(size[1]/scale_factor))
+        self._boxes = pygame.Surface(self._scaled_size, pygame.SRCALPHA, 32)
         self._boxes.fill(color)
-        self._data = np.zeros(scaled_size, dtype=np.int16)
+        self._data = np.zeros(self._scaled_size, dtype=np.int16)
         self._norm = None
         self._dirty = True
         self._last_update = None
@@ -39,3 +42,14 @@ class Heatmap(object):
             self._dirty = False
 
         return self.surface
+
+    def snapshot(self):
+        return base64.b64encode(gzip.compress(self._data.tobytes())).decode('ascii')
+
+    def load_snapshot(self, data):
+        try:
+            loaded = gzip.decompress(base64.b64decode(data))
+            self._data = np.frombuffer(loaded, dtype=np.int16).copy()
+            self._data.resize(self._scaled_size)
+        except (ValueError, TypeError) as e:
+            print("Could not load retained snapshot: {}".format(e))

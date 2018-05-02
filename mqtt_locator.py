@@ -109,11 +109,14 @@ class Map(object):
         self._cum_order_spend_anim = AnimatedValue()
         self._day_start = datetime.now()
         self._last_frame = 0
-        self._event_topic = config['topic']
+        self._event_topic = config['event_topic']
+        self._my_topic = config['topic']
         self._stats = {}
         self._stats_last_update = None
         self._stats_stale = timedelta(seconds=10)
         self._loading = False
+        self._heatmap_show = False
+        self._heatmap_location = 0
 
         self.client = mqtt.Client()
         self.client.on_connect = self.on_connect
@@ -186,6 +189,7 @@ class Map(object):
         print("Connected with result code {}".format(response_code))
         print()
         client.subscribe(self._event_topic)
+        client.subscribe(self._my_topic + '/#')
         client.subscribe('dataclip_mqtt/#')
 
     def on_message(self, _client, _userdata, message):
@@ -195,6 +199,9 @@ class Map(object):
             self.on_event(json.loads(message.payload.decode('utf-8')))
         elif message.topic == 'dataclip_mqtt/stats':
             self.on_stats(json.loads(message.payload.decode('utf-8')))
+        elif message.topic.startswith(self._my_topic):
+            subpath = message.topic[len(self._my_topic) + 1:]
+            self.on_map_message(subpath, json.loads(message.payload.decode('utf-8')))
 
     def on_event(self, payload):
         ping = self._to_ping(payload)
@@ -213,6 +220,14 @@ class Map(object):
     def on_stats(self, stats):
         self._stats_last_update = datetime.now()
         self._stats = stats
+
+    def on_map_message(self, path, payload):
+        if path == 'heatmap/enable':
+            self._heatmap_show = bool(payload)
+        elif path == 'heatmap/location_id':
+            self._heatmap_location = int(payload)
+        elif path == 'heatmap/snapshot':
+            self._heatmap.load_snapshot(payload)
 
     def _to_ping(self, payload):
         if payload["postal_code"] is None or payload["postal_code"] == "":
@@ -310,7 +325,8 @@ class Map(object):
         self._world.Step(frame_delay, 6, 2)
         self._last_frame = frame_time
         self.win.fill(Map.background_color)
-        self.win.blit(self._heatmap.render(), (0, 0))
+        if self._heatmap_show:
+            self.win.blit(self._heatmap.render(), (0, 0))
         self.win.blit(self._mask, (self.x_offset, self.y_offset))
         for ping in self.pings[:]:
             if ping.is_alive():
@@ -335,8 +351,13 @@ class Map(object):
 
         return (int(x_coord), int(y_coord))
 
+    def _snapshot(self):
+        self.client.publish(self._my_topic + '/heatmap/snapshot',
+                json.dumps(self._heatmap.snapshot()).encode('utf-8'), retain=True)
+
     def quit(self):
         """Cleanup"""
+        self._snapshot()
         self.client.loop_stop()
 
     def _maybe_reset_daily_totals(self):
