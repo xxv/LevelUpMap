@@ -407,17 +407,20 @@ def main():
     clock = pygame.time.Clock()
     world_map = Map(read_config(config_file))
 
-    while not done:
-        clock.tick(60)
+    try:
+        while not done:
+            clock.tick(60)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                done = True
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                done = True
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    done = True
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    done = True
 
-        world_map.draw()
-        pygame.display.flip()
+            world_map.draw()
+            pygame.display.flip()
+    except KeyboardInterrupt:
+        done = True
 
     world_map.quit()
     pygame.quit()
