@@ -122,7 +122,7 @@ class Map(object):
                             int(self.config["port"]),
                             int(self.config["keepalive"]))
 
-        self._font = pygame.font.SysFont('Source Sans Pro Semibold', 25)
+        self._font = pygame.font.SysFont('Source Sans Pro', 20, bold=True)
         self._legend_font = pygame.font.SysFont('Source Sans Pro', 25)
         self._font_avg_spend = pygame.font.SysFont('Source Sans Pro', 30, bold=True)
         self._mask = pygame.image.load(config['map_image_mask'])
