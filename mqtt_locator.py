@@ -228,6 +228,8 @@ class Map(object):
             self._heatmap_location = int(payload)
         elif path == 'heatmap/snapshot':
             self._heatmap.load_snapshot(payload)
+        elif path == 'snapshot':
+            self._load_snapshot(payload)
 
     def _to_ping(self, payload):
         if payload["postal_code"] is None or payload["postal_code"] == "":
@@ -354,6 +356,21 @@ class Map(object):
     def _snapshot(self):
         self.client.publish(self._my_topic + '/heatmap/snapshot',
                 json.dumps(self._heatmap.snapshot()).encode('utf-8'), retain=True)
+        self.client.publish(self._my_topic + '/snapshot',
+                json.dumps(self._to_snapshot()).encode('utf-8'), retain=True)
+
+    def _to_snapshot(self):
+        snapshot = {}
+        snapshot['day_start'] = self._day_start.timestamp()
+        snapshot['cumulative_order_spend'] = self._cum_order_spend
+        snapshot['order_count'] = self._order_count
+
+        return snapshot
+
+    def _load_snapshot(self, payload):
+        self._day_start = datetime.fromtimestamp(payload['day_start'])
+        self._cum_order_spend = payload['cumulative_order_spend']
+        self._order_count = payload['order_count']
 
     def quit(self):
         """Cleanup"""
