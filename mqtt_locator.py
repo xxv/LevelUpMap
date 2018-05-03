@@ -18,8 +18,8 @@ import pyproj
 from Box2D import b2PolygonShape, b2World
 from uszipcode import ZipcodeSearchEngine
 
-from animated_value import AnimatedAverage, AnimatedValue
 from heatmap import Heatmap
+from ordertotals import OrderTotals
 
 
 class Ping(object):
@@ -94,7 +94,6 @@ class Ping(object):
         return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time,
                                                   *self.position)
 
-
 class Map(object):
     """A class to render the map and pings"""
 
@@ -105,16 +104,9 @@ class Map(object):
         pygame.display.init()
         pygame.font.init()
         self._world = b2World(gravity=(0, 0))
-        screen_info = pygame.display.Info()
-        pygame.mouse.set_visible(False)
         self.pings = []
         self.config = config
         self._debug_enable = False
-        self._avg_spend = AnimatedAverage(count=500)
-        self._order_count = 0
-        self._cum_order_spend = 0
-        self._cum_order_spend_anim = AnimatedValue()
-        self._day_start = datetime.now()
         self._last_frame = 0
         self._event_topic = config['event_topic']
         self._my_topic = config['topic']
@@ -134,7 +126,6 @@ class Map(object):
 
         self._font = pygame.font.SysFont('Source Sans Pro', 20, bold=True)
         self._legend_font = pygame.font.SysFont('Source Sans Pro', 25)
-        self._font_avg_spend = pygame.font.SysFont('Source Sans Pro', 30, bold=True)
         self._mask = pygame.image.load(config['map_image_mask'])
 
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
@@ -147,6 +138,10 @@ class Map(object):
         self.y_shift = self._mask.get_height()/2
 
         self.zips = None
+
+        pygame.mouse.set_visible(False)
+        screen_info = pygame.display.Info()
+
         if config["fullscreen"].lower() != 'true':
             self.win = pygame.display.set_mode(
                 [
@@ -169,6 +164,7 @@ class Map(object):
 
         self._progress_anim = Map._load_anim('progress{:}.png', range(1, 9), 100)
         self._heatmap = Heatmap(self._mask.get_size(), (0x00, 0x00, 0x00), (0xff, 0xff, 0xff))
+        self._order_totals = OrderTotals()
         self.client.loop_start()
 
     def test(self):
@@ -220,13 +216,7 @@ class Map(object):
         if not ping:
             return
         self.pings.append(ping)
-        spend = int(payload['spend_amount'])
-        if spend:
-            self._avg_spend.add(spend)
-        self._maybe_reset_daily_totals()
-        self._order_count += 1
-        self._cum_order_spend += spend
-        self._cum_order_spend_anim.set(self._cum_order_spend)
+        self._order_totals.add(payload)
         self._heatmap.add(ping.position)
 
     def on_stats(self, stats):
@@ -244,7 +234,7 @@ class Map(object):
             elif path == 'heatmap/snapshot':
                 self._heatmap.load_snapshot(payload)
             elif path == 'snapshot':
-                self._load_snapshot(payload)
+                self._order_totals.load_snapshot(payload)
             elif path == 'debug':
                 self._debug_enable = bool(payload)
         except ValueError as e:
@@ -273,11 +263,6 @@ class Map(object):
                     x_coord + self.x_offset,
                     y_coord + self.y_offset,
                     color, merchant_name)
-
-    def _draw_text_stat(self, text, value, index):
-        self.win.blit(self._font_avg_spend.render(text.format(value),
-                                                  True, self._text_color),
-                      (100, (self.win.get_height() - 180) + index * 40))
 
     def _render_legend_item(self, color, text):
         text_offset = (30, -8)
@@ -323,17 +308,6 @@ class Map(object):
 
         self.win.blit(surface, (0, 0))
 
-    def _draw_totals(self):
-        self._draw_text_stat("Average Order Price: ${:0.02f}", self._avg_spend.get()/100.0, 0)
-        self._draw_text_stat("Orders Today Total: ${:0,.02f}",
-                             self._cum_order_spend_anim.get()/100.0, 1)
-        self._draw_text_stat("Orders Today: {:,}", self._order_count, 2)
-        if self._day_start.hour != 0:
-            self.win.blit(self._legend_font.render(
-                "Order totals reset at {}".format(
-                    self._day_start.strftime("%Y-%m-%d %H:%M:%S %Z")),
-                True, self._text_color), (100, (self.win.get_height() - 40)))
-
     def _draw_progress(self):
         buffer_size = self._stats.get('buffer_size', 0)
 
@@ -360,8 +334,7 @@ class Map(object):
         return pyganim.PygAnimation([(filename_format.format(i), timing) for i in values])
 
     def _tick(self):
-        self._avg_spend.tick()
-        self._cum_order_spend_anim.tick()
+        self._order_totals.tick()
         frame_time = pygame.time.get_ticks() / 1000
 
         if self._last_frame:
@@ -391,7 +364,8 @@ class Map(object):
         self.win.blit(self._mask, (self.x_offset, self.y_offset))
 
         self._draw_pings()
-        self._draw_totals()
+        self._order_totals.draw(self.win, (100, (self.win.get_height() - 180)))
+
         self._draw_legend((self._mask.get_width() - 250, self._mask.get_height() - 150))
 
         if self._debug_enable:
@@ -411,32 +385,13 @@ class Map(object):
         self.client.publish(self._my_topic + '/heatmap/snapshot',
                             json.dumps(self._heatmap.snapshot()).encode('utf-8'), retain=True)
         self.client.publish(self._my_topic + '/snapshot',
-                            json.dumps(self._to_snapshot()).encode('utf-8'), retain=True)
-
-    def _to_snapshot(self):
-        snapshot = {}
-        snapshot['day_start'] = self._day_start.timestamp()
-        snapshot['cumulative_order_spend'] = self._cum_order_spend
-        snapshot['order_count'] = self._order_count
-
-        return snapshot
-
-    def _load_snapshot(self, payload):
-        self._day_start = datetime.fromtimestamp(payload['day_start'])
-        self._cum_order_spend = payload['cumulative_order_spend']
-        self._order_count = payload['order_count']
+                            json.dumps(self._order_totals.to_snapshot()).encode('utf-8'),
+                            retain=True)
 
     def quit(self):
         """Cleanup"""
         self._snapshot()
         self.client.loop_stop()
-
-    def _maybe_reset_daily_totals(self):
-        now = datetime.now()
-        if self._day_start.day != now.day:
-            self._cum_order_spend = 0
-            self._order_count = 0
-            self._day_start = now
 
 
 def read_config(config_file):
