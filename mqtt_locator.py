@@ -103,6 +103,7 @@ class Map(object):
         pygame.mouse.set_visible(False)
         self.pings = []
         self.config = config
+        self._debug_enable = False
         self._avg_spend = AnimatedAverage(count=500)
         self._order_count = 0
         self._cum_order_spend = 0
@@ -222,14 +223,19 @@ class Map(object):
         self._stats = stats
 
     def on_map_message(self, path, payload):
-        if path == 'heatmap/enable':
-            self._heatmap_show = bool(payload)
-        elif path == 'heatmap/location_id':
-            self._heatmap_location = int(payload)
-        elif path == 'heatmap/snapshot':
-            self._heatmap.load_snapshot(payload)
-        elif path == 'snapshot':
-            self._load_snapshot(payload)
+        try:
+            if path == 'heatmap/enable':
+                self._heatmap_show = bool(payload)
+            elif path == 'heatmap/location_id':
+                self._heatmap_location = int(payload)
+            elif path == 'heatmap/snapshot':
+                self._heatmap.load_snapshot(payload)
+            elif path == 'snapshot':
+                self._load_snapshot(payload)
+            elif path == 'debug':
+                self._debug_enable = bool(payload)
+        except ValueError as e:
+            print("Error parsing message '{}' to sub-path '{}': {}".format(payload, path, e))
 
     def _to_ping(self, payload):
         if payload["postal_code"] is None or payload["postal_code"] == "":
@@ -272,6 +278,7 @@ class Map(object):
         self.win.blit(self._render_legend_item(Ping.BLUE, "in-store orders"), (position[0], position[1] + 60))
 
     def _draw_stats(self):
+        height = 8
         source = self._stats.get('source', {})
 
         buffer_size = self._stats.get('buffer_size', 0)
@@ -280,12 +287,17 @@ class Map(object):
         in_win = source.get('events_in_window', 0)
         after = source.get('events_after_window', 0)
 
-        surface = pygame.surface.Surface((self.win.get_width(), 4), pygame.SRCALPHA, 32)
-        pygame.draw.line(surface, (180, 180, 180), (0, 0), (before, 0), 2)
-        pygame.draw.line(surface, (90, 90, 90), (before, 0), (before + in_win, 0), 2)
-        pygame.draw.line(surface, (10, 10, 10), (before + in_win, 0), (before + in_win + after, 0), 2)
+        surface = pygame.surface.Surface((self.win.get_width(),
+                                         height * 2), pygame.SRCALPHA, 32)
+        pygame.draw.rect(surface, (180, 180, 180),
+                         ((0, 0), (before, height)))
+        pygame.draw.rect(surface, (90, 90, 90),
+                         ((before, 0), (before + in_win, height)))
+        pygame.draw.rect(surface, (10, 10, 10),
+                         ((before + in_win, 0), (before + in_win + after, height)))
 
-        pygame.draw.line(surface, (90, 90, 90), (before, 2), (before + buffer_size, 2), 2)
+        pygame.draw.rect(surface, (90, 90, 90),
+                         ((before, height), (before + buffer_size, height*2)))
 
         self.win.blit(surface, (0, 0))
 
@@ -342,7 +354,8 @@ class Map(object):
         if self._day_start.hour != 0:
             self.win.blit(self._legend_font.render("Order totals reset at {}".format(self._day_start.strftime("%Y-%m-%d %H:%M:%S %Z")), True, self._text_color), (100, (self.win.get_height() - 40)))
         self._draw_legend((self._mask.get_width() - 250, self._mask.get_height() - 150))
-        self._draw_stats()
+        if self._debug_enable:
+            self._draw_stats()
         self._draw_progress()
 
     def project(self, lon, lat):
