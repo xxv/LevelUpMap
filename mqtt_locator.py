@@ -68,17 +68,21 @@ class Ping(object):
         center_square = (pos[0] - sq_size/2,
                          pos[1] - sq_size/2)
         alpha = int((1.0 - self.life_factor()) * 255)
+
         if not self._rect_surface:
             self._rect_surface = pygame.surface.Surface((sq_size, sq_size))
             self._rect_surface.fill(self._color)
+
         self._rect_surface.set_alpha(alpha)
         win.blit(self._rect_surface, center_square)
+
         if not self._text_surface:
             self._text_surface = font.render(self._text, True, self._text_color)
             rect = self._text_surface.get_rect()
             self._text_surface.convert_alpha()
             self._text_surface2 = pygame.surface.Surface(rect.size, pygame.SRCALPHA, 32)
             self._text_width = rect.width
+
         fade = int(255 * (1 - self.life_factor()))
         self._text_surface2.fill((255, 255, 255, fade))
         self._text_surface2.blit(self._text_surface, (0, 0),
@@ -93,6 +97,36 @@ class Ping(object):
     def __repr__(self):
         return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time,
                                                   *self.position)
+
+class Progress(object):
+    def __init__(self):
+        self._progress_anim = Progress._load_anim('progress{:}.png', range(1, 9), 100)
+        self._value = False
+        self._dirty = True
+
+    def show(self, value):
+        if self._value != value:
+            self._dirty = True
+
+        self._value = value
+
+    def draw(self, surface):
+        if self._dirty:
+            if self._value:
+                self._progress_anim.play()
+            else:
+                self._progress_anim.stop()
+            self._dirty = False
+
+        if self._value:
+            win_center = surface.get_rect().center
+            anim_center = self._progress_anim.getRect().center
+            self._progress_anim.blit(surface, (win_center[0] - anim_center[0],
+                                                win_center[1] - anim_center[1]))
+
+    @staticmethod
+    def _load_anim(filename_format, values, timing):
+        return pyganim.PygAnimation([(filename_format.format(i), timing) for i in values])
 
 class Map(object):
     """A class to render the map and pings"""
@@ -162,9 +196,10 @@ class Map(object):
         self._mask = self._mask.convert_alpha()
         print("{} {}".format(self.x_offset, self.y_offset))
 
-        self._progress_anim = Map._load_anim('progress{:}.png', range(1, 9), 100)
         self._heatmap = Heatmap(self._mask.get_size(), (0x00, 0x00, 0x00), (0xff, 0xff, 0xff))
         self._order_totals = OrderTotals()
+        self._progress = Progress()
+
         self.client.loop_start()
 
     def test(self):
@@ -308,30 +343,6 @@ class Map(object):
 
         self.win.blit(surface, (0, 0))
 
-    def _draw_progress(self):
-        buffer_size = self._stats.get('buffer_size', 0)
-
-        stats_stale = not self._stats_last_update or (
-            datetime.now() > (self._stats_last_update + self._stats_stale))
-
-        new_loading = buffer_size == 0 or stats_stale
-
-        if new_loading != self._loading:
-            self._loading = new_loading
-            if new_loading:
-                self._progress_anim.play()
-            else:
-                self._progress_anim.stop()
-
-        if new_loading:
-            win_center = self.win.get_rect().center
-            anim_center = self._progress_anim.getRect().center
-            self._progress_anim.blit(self.win, (win_center[0] - anim_center[0],
-                                                win_center[1] - anim_center[1]))
-
-    @staticmethod
-    def _load_anim(filename_format, values, timing):
-        return pyganim.PygAnimation([(filename_format.format(i), timing) for i in values])
 
     def _tick(self):
         self._order_totals.tick()
@@ -371,7 +382,18 @@ class Map(object):
         if self._debug_enable:
             self._draw_debug_stats()
 
-        self._draw_progress()
+        self._update_progress()
+        self._progress.draw(self.win)
+
+    def _update_progress(self):
+        buffer_size = self._stats.get('buffer_size', 0)
+
+        stats_stale = not self._stats_last_update or (
+            datetime.now() > (self._stats_last_update + self._stats_stale))
+
+        loading = buffer_size == 0 or stats_stale
+
+        self._progress.show(loading)
 
     def project(self, lon, lat):
         """Convert lat/long to pixel x/y"""
