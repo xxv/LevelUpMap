@@ -8,6 +8,7 @@ except ImportError:
     from configparser import SafeConfigParser
 from datetime import datetime, timedelta
 import json
+import math
 import sys
 import time
 
@@ -22,30 +23,70 @@ from heatmap import Heatmap
 from ordertotals import OrderTotals
 
 
+class FadeText(object):
+    """Text that can fade its alpha channel."""
+    def __init__(self, font, text, color):
+        self._font = font
+        self._text = text
+        self._color = color
+        self._surface = None
+        self._surface2 = None
+        self._text_width = None
+
+    def draw(self, surface, position, fade):
+        if not self._surface:
+            self._surface = self._font.render(self._text, True, self._color)
+            rect = self._surface.get_rect()
+            self._surface.convert_alpha()
+            self._surface2 = pygame.surface.Surface(rect.size, pygame.SRCALPHA, 32)
+            self._text_width = rect.width
+
+        self._surface2.fill((255, 255, 255, fade))
+        self._surface2.blit(self._surface, (0, 0),
+                            special_flags=pygame.BLEND_RGBA_MULT)
+        # Centered
+        text_pos = (position[0] - self._text_width/2, position[1])
+        surface.blit(self._surface2, text_pos)
+
 class Ping(object):
     """An event displayed on the map."""
-
 
     ORANGE = (0xFF, 0x8D, 0x00)
     BLUE = (0x1E, 0xBB, 0xF3)
     GREEN = (0x71, 0xCB, 0x3A)
 
     _text_color = (0x55, 0x55, 0x55)
+    _text_color_earn = (0x77, 0x77, 0x77)
 
-    def __init__(self, world, x_loc, y_loc, color, text):
+
+    def __init__(self, world, x_loc, y_loc, color, text, earn_amount=0):
         self.created_time = time.time()
         self._life_time = 3
         self._position = (x_loc, y_loc)
         self._size = 40
         self._color = color
         self._text = text
-        self._text_surface = None
-        self._text_surface2 = None
-        self._text_width = None
         self._rect_surface = None
+        self._font = pygame.font.SysFont('Source Sans Pro', 20, bold=True)
+        self._earn_font = pygame.font.SysFont('Source Sans Pro', 30, bold=True)
+        self._text_widget = FadeText(self._font, text, self._text_color)
         self._body = world.CreateDynamicBody(position=(x_loc, y_loc), fixedRotation=True)
         self._box = self._body.CreatePolygonFixture(box=(self._size, self._size),
                                                     density=1, friction=0.0)
+        self._earn_amount = earn_amount
+        if earn_amount:
+            if earn_amount % 100 == 0:
+                earn_text = "${:d}".format(int(earn_amount/100))
+            else:
+                earn_text = "${:.02f}".format(earn_amount/100.0)
+
+            self._earn_text_widget = FadeText(self._earn_font, earn_text,
+                                              self._text_color_earn)
+            self._earn_body = world.CreateDynamicBody(position=(x_loc, y_loc - self._size/2),
+                                                      fixedRotation=True, linearDamping=0.95)
+            self._earn_body.ApplyLinearImpulse((0, -1000), (x_loc, y_loc - 1), wake=True)
+        else:
+            self._earn_body = None
 
     @property
     def position(self):
@@ -60,14 +101,19 @@ class Ping(object):
         """Gets a scaling factor based on life remaining"""
         return (time.time() - self.created_time) / self._life_time
 
-    def draw(self, win, font):
+    def draw(self, win):
         """Renders a ping to a display window"""
         pos = self._body.position
 
         sq_size = self._size
         center_square = (pos[0] - sq_size/2,
                          pos[1] - sq_size/2)
+        fade = int(255 * (1 - self.life_factor()))
         alpha = int((1.0 - self.life_factor()) * 255)
+
+        if self._earn_body:
+            earn_pos = tuple(map(int, self._earn_body.position))
+            self._earn_text_widget.draw(win, earn_pos, int(math.log2(fade + 1) * 32))
 
         if not self._rect_surface:
             self._rect_surface = pygame.surface.Surface((sq_size, sq_size))
@@ -76,23 +122,13 @@ class Ping(object):
         self._rect_surface.set_alpha(alpha)
         win.blit(self._rect_surface, center_square)
 
-        if not self._text_surface:
-            self._text_surface = font.render(self._text, True, self._text_color)
-            rect = self._text_surface.get_rect()
-            self._text_surface.convert_alpha()
-            self._text_surface2 = pygame.surface.Surface(rect.size, pygame.SRCALPHA, 32)
-            self._text_width = rect.width
-
-        fade = int(255 * (1 - self.life_factor()))
-        self._text_surface2.fill((255, 255, 255, fade))
-        self._text_surface2.blit(self._text_surface, (0, 0),
-                                 special_flags=pygame.BLEND_RGBA_MULT)
-        text_pos = (pos[0] - self._text_width/2, pos[1] + 25)
-        win.blit(self._text_surface2, text_pos)
+        self._text_widget.draw(win, (pos[0], pos[1] + 25), fade)
 
     def destroy(self, world):
         if self._body:
             world.DestroyBody(self._body)
+        if self._earn_body:
+            world.DestroyBody(self._earn_body)
 
     def __repr__(self):
         return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time,
@@ -158,8 +194,8 @@ class Map(object):
                             int(self.config["port"]),
                             int(self.config["keepalive"]))
 
-        self._font = pygame.font.SysFont('Source Sans Pro', 20, bold=True)
         self._legend_font = pygame.font.SysFont('Source Sans Pro', 25)
+        self._legend_surface = None
         self._mask = pygame.image.load(config['map_image_mask'])
 
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
@@ -293,11 +329,12 @@ class Map(object):
             color = Ping.BLUE
 
         (x_coord, y_coord) = self.project(zcode["Longitude"], zcode["Latitude"])
+        earn = int(payload.get('earn_amount', 0))
 
         return Ping(self._world,
                     x_coord + self.x_offset,
                     y_coord + self.y_offset,
-                    color, merchant_name)
+                    color, merchant_name, earn)
 
     def _render_legend_item(self, color, text):
         text_offset = (30, -8)
@@ -313,11 +350,13 @@ class Map(object):
         return surface
 
     def _draw_legend(self, position):
-        self.win.blit(self._render_legend_item(Ping.ORANGE, "LevelUp app"), position)
-        self.win.blit(self._render_legend_item(Ping.GREEN, "order ahead"),
-                      (position[0], position[1] + 30))
-        self.win.blit(self._render_legend_item(Ping.BLUE, "in-store orders"),
-                      (position[0], position[1] + 60))
+        if not self._legend_surface:
+            surface = pygame.Surface((500, 500), pygame.SRCALPHA, 32)
+            surface.blit(self._render_legend_item(Ping.ORANGE, "LevelUp app"), (0, 0))
+            surface.blit(self._render_legend_item(Ping.GREEN, "order ahead"), (0, 30))
+            surface.blit(self._render_legend_item(Ping.BLUE, "in-store orders"), (0, 60))
+            self._legend_surface = surface
+        self.win.blit(self._legend_surface, position)
 
     def _draw_debug_stats(self):
         height = 8
@@ -359,7 +398,7 @@ class Map(object):
     def _draw_pings(self):
         for ping in self.pings[:]:
             if ping.is_alive():
-                ping.draw(self.win, self._font)
+                ping.draw(self.win)
             else:
                 ping.destroy(self._world)
                 self.pings.remove(ping)
