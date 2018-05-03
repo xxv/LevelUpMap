@@ -1,4 +1,4 @@
-"""A library to plot zipcodes on a map of America"""
+"""A visualization to plot events tagged with zip codes on a map of the US"""
 
 from __future__ import print_function
 
@@ -8,7 +8,6 @@ except ImportError:
     from configparser import SafeConfigParser
 from datetime import datetime, timedelta
 import json
-import random
 import sys
 import time
 
@@ -16,16 +15,15 @@ import paho.mqtt.client as mqtt
 import pygame
 import pyganim
 import pyproj
-from animated_value import AnimatedAverage, AnimatedValue
 from Box2D import b2PolygonShape, b2World
-
 from uszipcode import ZipcodeSearchEngine
 
+from animated_value import AnimatedAverage, AnimatedValue
 from heatmap import Heatmap
 
 
 class Ping(object):
-    """A ping on the map"""
+    """An event displayed on the map."""
 
 
     ORANGE = (0xFF, 0x8D, 0x00)
@@ -36,30 +34,37 @@ class Ping(object):
 
     def __init__(self, world, x_loc, y_loc, color, text):
         self.created_time = time.time()
-        self.life_time = 3
-        self.position = (x_loc, y_loc)
-        self.size = 40
+        self._life_time = 3
+        self._position = (x_loc, y_loc)
+        self._size = 40
         self._color = color
         self._text = text
         self._text_surface = None
         self._text_surface2 = None
+        self._text_width = None
         self._rect_surface = None
         self._body = world.CreateDynamicBody(position=(x_loc, y_loc), fixedRotation=True)
-        self._box = self._body.CreatePolygonFixture(box=(self.size, self.size), density=1, friction=0.0)
+        self._box = self._body.CreatePolygonFixture(box=(self._size, self._size),
+                                                    density=1, friction=0.0)
+
+    @property
+    def position(self):
+        """Initial coordinates."""
+        return self._position
 
     def is_alive(self):
         """Returns true if we are within lifetime, false otherwise"""
-        return (time.time() - self.created_time) < self.life_time
+        return (time.time() - self.created_time) < self._life_time
 
     def life_factor(self):
         """Gets a scaling factor based on life remaining"""
-        return (time.time() - self.created_time) / self.life_time
+        return (time.time() - self.created_time) / self._life_time
 
     def draw(self, win, font):
         """Renders a ping to a display window"""
         pos = self._body.position
 
-        sq_size = self.size
+        sq_size = self._size
         center_square = (pos[0] - sq_size/2,
                          pos[1] - sq_size/2)
         alpha = int((1.0 - self.life_factor()) * 255)
@@ -76,7 +81,8 @@ class Ping(object):
             self._text_width = rect.width
         fade = int(255 * (1 - self.life_factor()))
         self._text_surface2.fill((255, 255, 255, fade))
-        self._text_surface2.blit(self._text_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        self._text_surface2.blit(self._text_surface, (0, 0),
+                                 special_flags=pygame.BLEND_RGBA_MULT)
         text_pos = (pos[0] - self._text_width/2, pos[1] + 25)
         win.blit(self._text_surface2, text_pos)
 
@@ -86,7 +92,7 @@ class Ping(object):
 
     def __repr__(self):
         return "<Ping {}: {:.3f}, {:.3f}>".format(self.created_time,
-                                                  *self.coordinate)
+                                                  *self.position)
 
 
 class Map(object):
@@ -134,8 +140,8 @@ class Map(object):
         self.proj_in = pyproj.Proj(proj='latlong', datum='WGS84')
         self.proj_map = pyproj.Proj(init=config['map_projection'])
 
-        MANUAL_SCALE_FACTOR = float(self.config['scale_factor'])
-        self.x_scale = self._mask.get_height()/MANUAL_SCALE_FACTOR
+        manual_scale_factor = float(self.config['scale_factor'])
+        self.x_scale = self._mask.get_height()/manual_scale_factor
         self.y_scale = self.x_scale
         self.x_shift = self._mask.get_width()/2
         self.y_shift = self._mask.get_height()/2
@@ -180,10 +186,14 @@ class Map(object):
         print("LA: {} -> {}".format(la, self.project(*la)))
         print("Bar Harbor: {} -> {}".format(bar_harbor, self.project(*bar_harbor)))
         print("Miami: {} -> {}".format(miami, self.project(*miami)))
-        places = [seattle, la, bar_harbor, miami, left_coast, cape_flattery, west_quoddy, p_town]
+        places = [seattle, la, bar_harbor, miami, left_coast, cape_flattery,
+                  west_quoddy, p_town]
         for place in places:
             (x_coord, y_coord) = self.project(*place)
-            self.pings.append(Ping(self._world, x_coord + self.x_offset, y_coord + self.y_offset, (0, 0, 0), ''))
+            self.pings.append(Ping(self._world,
+                                   x_coord + self.x_offset,
+                                   y_coord + self.y_offset,
+                                   (0, 0, 0), ''))
 
     def on_connect(self, client, _flags, _userdata, response_code):
         """MQTT Connection callback"""
@@ -205,6 +215,7 @@ class Map(object):
             self.on_map_message(subpath, json.loads(message.payload.decode('utf-8')))
 
     def on_event(self, payload):
+        """Called when on event comes in that should be displayed."""
         ping = self._to_ping(payload)
         if not ping:
             return
@@ -219,10 +230,12 @@ class Map(object):
         self._heatmap.add(ping.position)
 
     def on_stats(self, stats):
+        """Called when a stats broadcast comes in."""
         self._stats_last_update = datetime.now()
         self._stats = stats
 
     def on_map_message(self, path, payload):
+        """Called when a map configuration message arrives."""
         try:
             if path == 'heatmap/enable':
                 self._heatmap_show = bool(payload)
@@ -256,17 +269,24 @@ class Map(object):
 
         (x_coord, y_coord) = self.project(zcode["Longitude"], zcode["Latitude"])
 
-        return Ping(self._world, x_coord + self.x_offset, y_coord + self.y_offset, color, merchant_name)
+        return Ping(self._world,
+                    x_coord + self.x_offset,
+                    y_coord + self.y_offset,
+                    color, merchant_name)
 
     def _draw_text_stat(self, text, value, index):
-        self.win.blit(self._font_avg_spend.render(text.format(value), True, self._text_color), (100, (self.win.get_height() - 180) + index * 40))
+        self.win.blit(self._font_avg_spend.render(text.format(value),
+                                                  True, self._text_color),
+                      (100, (self.win.get_height() - 180) + index * 40))
 
     def _render_legend_item(self, color, text):
         text_offset = (30, -8)
         rect_size = 20
         text_surface = self._legend_font.render(text, True, self._text_color)
         text_size = text_surface.get_rect().size
-        surface = pygame.surface.Surface((text_size[0] + text_offset[0], text_size[1] + text_offset[1]), pygame.SRCALPHA, 32)
+        surface = pygame.surface.Surface((text_size[0] + text_offset[0],
+                                          text_size[1] + text_offset[1]),
+                                         pygame.SRCALPHA, 32)
         surface.blit(text_surface, text_offset)
         pygame.draw.rect(surface, color, (0, 0, rect_size, rect_size), 0)
 
@@ -274,10 +294,12 @@ class Map(object):
 
     def _draw_legend(self, position):
         self.win.blit(self._render_legend_item(Ping.ORANGE, "LevelUp app"), position)
-        self.win.blit(self._render_legend_item(Ping.GREEN, "order ahead"), (position[0], position[1] + 30))
-        self.win.blit(self._render_legend_item(Ping.BLUE, "in-store orders"), (position[0], position[1] + 60))
+        self.win.blit(self._render_legend_item(Ping.GREEN, "order ahead"),
+                      (position[0], position[1] + 30))
+        self.win.blit(self._render_legend_item(Ping.BLUE, "in-store orders"),
+                      (position[0], position[1] + 60))
 
-    def _draw_stats(self):
+    def _draw_debug_stats(self):
         height = 8
         source = self._stats.get('source', {})
 
@@ -300,6 +322,17 @@ class Map(object):
                          ((before, height), (before + buffer_size, height*2)))
 
         self.win.blit(surface, (0, 0))
+
+    def _draw_totals(self):
+        self._draw_text_stat("Average Order Price: ${:0.02f}", self._avg_spend.get()/100.0, 0)
+        self._draw_text_stat("Orders Today Total: ${:0,.02f}",
+                             self._cum_order_spend_anim.get()/100.0, 1)
+        self._draw_text_stat("Orders Today: {:,}", self._order_count, 2)
+        if self._day_start.hour != 0:
+            self.win.blit(self._legend_font.render(
+                "Order totals reset at {}".format(
+                    self._day_start.strftime("%Y-%m-%d %H:%M:%S %Z")),
+                True, self._text_color), (100, (self.win.get_height() - 40)))
 
     def _draw_progress(self):
         buffer_size = self._stats.get('buffer_size', 0)
@@ -326,36 +359,44 @@ class Map(object):
     def _load_anim(filename_format, values, timing):
         return pyganim.PygAnimation([(filename_format.format(i), timing) for i in values])
 
-
-    def draw(self):
-        """Render the map and it's pings"""
+    def _tick(self):
         self._avg_spend.tick()
         self._cum_order_spend_anim.tick()
         frame_time = pygame.time.get_ticks() / 1000
+
         if self._last_frame:
             frame_delay = frame_time - self._last_frame
         else:
             frame_delay = 1.0/60
+
         self._world.Step(frame_delay, 6, 2)
         self._last_frame = frame_time
-        self.win.fill(Map.background_color)
-        if self._heatmap_show:
-            self.win.blit(self._heatmap.render(), (0, 0))
-        self.win.blit(self._mask, (self.x_offset, self.y_offset))
+
+    def _draw_pings(self):
         for ping in self.pings[:]:
             if ping.is_alive():
                 ping.draw(self.win, self._font)
             else:
                 ping.destroy(self._world)
                 self.pings.remove(ping)
-        self._draw_text_stat("Average Order Price: ${:0.02f}", self._avg_spend.get()/100.0, 0)
-        self._draw_text_stat("Orders Today Total: ${:0,.02f}", self._cum_order_spend_anim.get()/100.0, 1)
-        self._draw_text_stat("Orders Today: {:,}", self._order_count, 2)
-        if self._day_start.hour != 0:
-            self.win.blit(self._legend_font.render("Order totals reset at {}".format(self._day_start.strftime("%Y-%m-%d %H:%M:%S %Z")), True, self._text_color), (100, (self.win.get_height() - 40)))
+
+    def draw(self):
+        """Render the map and it's pings"""
+
+        self._tick()
+        self.win.fill(Map.background_color)
+
+        if self._heatmap_show:
+            self.win.blit(self._heatmap.render(), (0, 0))
+        self.win.blit(self._mask, (self.x_offset, self.y_offset))
+
+        self._draw_pings()
+        self._draw_totals()
         self._draw_legend((self._mask.get_width() - 250, self._mask.get_height() - 150))
+
         if self._debug_enable:
-            self._draw_stats()
+            self._draw_debug_stats()
+
         self._draw_progress()
 
     def project(self, lon, lat):
@@ -368,9 +409,9 @@ class Map(object):
 
     def _snapshot(self):
         self.client.publish(self._my_topic + '/heatmap/snapshot',
-                json.dumps(self._heatmap.snapshot()).encode('utf-8'), retain=True)
+                            json.dumps(self._heatmap.snapshot()).encode('utf-8'), retain=True)
         self.client.publish(self._my_topic + '/snapshot',
-                json.dumps(self._to_snapshot()).encode('utf-8'), retain=True)
+                            json.dumps(self._to_snapshot()).encode('utf-8'), retain=True)
 
     def _to_snapshot(self):
         snapshot = {}
