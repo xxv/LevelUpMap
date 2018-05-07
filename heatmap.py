@@ -65,3 +65,4 @@ class Heatmap(object):
             self._data.resize(self._scaled_size)
         except (ValueError, TypeError) as e:
             print("Could not load retained snapshot: {}".format(e))
+            self._data = np.zeros(self._scaled_size, dtype=np.int16)
