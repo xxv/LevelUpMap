@@ -164,13 +164,33 @@ class Progress(object):
     def _load_anim(filename_format, values, timing):
         return pyganim.PygAnimation([(filename_format.format(i), timing) for i in values])
 
+class FPSCounter(object):
+    def __init__(self, clock):
+        self._clock = clock
+        self._font = pygame.font.SysFont('Source Sans Pro', 25)
+        self._update_frequency = 120
+        self._update_counter = 0
+        self._surface = None
+        self._color = pygame.Color(0, 0, 0)
+
+    def draw(self, surface, position):
+        self._update_counter += 1
+        if not self._surface or self._update_counter > self._update_frequency:
+            self._surface = self._font.render("{:0.02f} FPS".format(self._clock.get_fps()),
+                                              False, self._color)
+            self._update_counter = 0
+
+        surface.blit(self._surface, position)
+
+
 class Map(object):
     """A class to render the map and pings"""
 
     _text_color = (0x55, 0x55, 0x55)
     background_color = (0xcc, 0xcc, 0xcc)
 
-    def __init__(self, config):
+    def __init__(self, config, clock):
+        self._clock = clock
         pygame.display.init()
         pygame.font.init()
         self._world = b2World(gravity=(0, 0))
@@ -235,6 +255,7 @@ class Map(object):
         self._heatmap = Heatmap(self._mask.get_size(), (0x00, 0x00, 0x00), (0xff, 0xff, 0xff))
         self._order_totals = OrderTotals()
         self._progress = Progress()
+        self._fps_counter = FPSCounter(self._clock)
 
         self.client.loop_start()
 
@@ -369,7 +390,7 @@ class Map(object):
         after = source.get('events_after_window', 0)
 
         surface = pygame.surface.Surface((self.win.get_width(),
-                                         height * 2), pygame.SRCALPHA, 32)
+                                         height * 6), pygame.SRCALPHA, 32)
         pygame.draw.rect(surface, (180, 180, 180),
                          ((0, 0), (before, height)))
         pygame.draw.rect(surface, (90, 90, 90),
@@ -380,20 +401,15 @@ class Map(object):
         pygame.draw.rect(surface, (90, 90, 90),
                          ((before, height), (before + buffer_size, height*2)))
 
+        self._fps_counter.draw(surface, (0, height * 2))
+
         self.win.blit(surface, (0, 0))
 
 
     def _tick(self):
         self._order_totals.tick()
-        frame_time = pygame.time.get_ticks() / 1000
 
-        if self._last_frame:
-            frame_delay = frame_time - self._last_frame
-        else:
-            frame_delay = 1.0/60
-
-        self._world.Step(frame_delay, 6, 2)
-        self._last_frame = frame_time
+        self._world.Step(self._clock.get_time()/1000.0, 6, 2)
 
     def _draw_pings(self):
         for ping in self.pings[:]:
@@ -475,7 +491,7 @@ def main():
     config_file = sys.argv[1]
     done = False
     clock = pygame.time.Clock()
-    world_map = Map(read_config(config_file))
+    world_map = Map(read_config(config_file), clock)
 
     try:
         while not done:
