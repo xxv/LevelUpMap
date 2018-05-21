@@ -168,7 +168,7 @@ class FPSCounter(object):
     def __init__(self, clock):
         self._clock = clock
         self._font = pygame.font.SysFont('Source Sans Pro', 25)
-        self._update_frequency = 120
+        self._update_frequency = 30
         self._update_counter = 0
         self._surface = None
         self._color = pygame.Color(0, 0, 0)
