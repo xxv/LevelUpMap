@@ -57,7 +57,11 @@ class Heatmap(object):
         return self._surface
 
     def snapshot(self):
-        return base64.b64encode(gzip.compress(self._data.tobytes())).decode('ascii')
+        try:
+            data = self._data.tobytes()
+        except AttributeError:
+            data = self._data.tostring()
+        return base64.b64encode(gzip.compress(data)).decode('ascii')
 
     def load_snapshot(self, data):
         try:

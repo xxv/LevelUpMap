@@ -459,11 +459,11 @@ class Map(object):
         return (int(x_coord), int(y_coord))
 
     def _snapshot(self):
-        self.client.publish(self._my_topic + '/heatmap/snapshot',
-                            json.dumps(self._heatmap.snapshot()).encode('utf-8'), retain=True)
         self.client.publish(self._my_topic + '/snapshot',
                             json.dumps(self._order_totals.to_snapshot()).encode('utf-8'),
                             retain=True)
+        self.client.publish(self._my_topic + '/heatmap/snapshot',
+                            json.dumps(self._heatmap.snapshot()).encode('utf-8'), retain=True)
 
     def quit(self):
         """Cleanup"""
