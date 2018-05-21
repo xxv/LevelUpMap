@@ -294,13 +294,19 @@ class Map(object):
     def on_message(self, _client, _userdata, message):
         """MQTT Message received callback"""
 
-        if message.topic == self._event_topic:
-            self.on_event(json.loads(message.payload.decode('utf-8')))
-        elif message.topic == 'dataclip_mqtt/stats':
-            self.on_stats(json.loads(message.payload.decode('utf-8')))
-        elif message.topic.startswith(self._my_topic):
-            subpath = message.topic[len(self._my_topic) + 1:]
-            self.on_map_message(subpath, json.loads(message.payload.decode('utf-8')))
+        try:
+            msg_json = json.loads(message.payload.decode('utf-8'))
+
+            if message.topic == self._event_topic:
+                self.on_event(msg_json)
+            elif message.topic == 'dataclip_mqtt/stats':
+                self.on_stats(msg_json)
+            elif message.topic.startswith(self._my_topic):
+                subpath = message.topic[len(self._my_topic) + 1:]
+                self.on_map_message(subpath, msg_json)
+
+        except ValueError as e:
+            print("Could not parse message to topic '{}' as JSON: {}".format(message.topic, e))
 
     def on_event(self, payload):
         """Called when on event comes in that should be displayed."""
