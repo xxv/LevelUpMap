@@ -17,7 +17,7 @@ class Heatmap(object):
         self._scaled_size = (int(size[0]/scale_factor), int(size[1]/scale_factor))
         self._boxes = pygame.Surface(self._scaled_size, pygame.SRCALPHA, 32)
         self._boxes.fill(color)
-        self._data = np.zeros(self._scaled_size, dtype=np.int16)
+        self._data = np.zeros(self._scaled_size, dtype=np.int32)
         self._norm = None
         self._dirty = True
         self._last_update = None
@@ -62,8 +62,8 @@ class Heatmap(object):
     def load_snapshot(self, data):
         try:
             loaded = gzip.decompress(base64.b64decode(data))
-            self._data = np.frombuffer(loaded, dtype=np.int16).copy()
+            self._data = np.frombuffer(loaded, dtype=np.int32).copy()
             self._data.resize(self._scaled_size)
         except (ValueError, TypeError) as e:
             print("Could not load retained snapshot: {}".format(e))
-            self._data = np.zeros(self._scaled_size, dtype=np.int16)
+            self._data = np.zeros(self._scaled_size, dtype=np.int32)
