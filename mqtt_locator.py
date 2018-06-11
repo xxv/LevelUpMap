@@ -295,7 +295,10 @@ class Map(object):
         """MQTT Message received callback"""
 
         try:
-            msg_json = json.loads(message.payload.decode('utf-8'))
+            if len(message.payload) > 0:
+                msg_json = json.loads(message.payload.decode('utf-8'))
+            else:
+                msg_json = None
 
             if message.topic == self._event_topic:
                 self.on_event(msg_json)
@@ -331,6 +334,8 @@ class Map(object):
                 self._heatmap_location = int(payload)
             elif path == 'heatmap/snapshot':
                 self._heatmap.load_snapshot(payload)
+            elif path == 'heatmap/reset':
+                self._heatmap.reset()
             elif path == 'snapshot':
                 self._order_totals.load_snapshot(payload)
             elif path == 'debug':
